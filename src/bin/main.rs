@@ -8,6 +8,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
+use modules::servo::ServoController;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -16,10 +17,10 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 extern crate alloc;
 
+mod modules;
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    // generator version: 0.3.1
-
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
@@ -41,10 +42,32 @@ async fn main(spawner: Spawner) {
     // TODO: Spawn some tasks
     let _ = spawner;
 
-    loop {
-        info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
-    }
+    let mut servo_controller = ServoController::new();
 
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
+    loop {
+        info!("spinning to 0");
+
+        servo_controller.move_servo(0, 0);
+        servo_controller.move_servo(1, 0);
+        servo_controller.move_servo(2, 0);
+        servo_controller.move_servo(3, 0);
+
+        Timer::after(Duration::from_secs(2)).await;
+        info!("spinning to 90");
+
+        servo_controller.move_servo(0, 90);
+        servo_controller.move_servo(1, 90);
+        servo_controller.move_servo(2, 90);
+        servo_controller.move_servo(3, 90);
+
+        Timer::after(Duration::from_secs(2)).await;
+        info!("spinning to 180");
+
+        servo_controller.move_servo(0, 180);
+        servo_controller.move_servo(1, 180);
+        servo_controller.move_servo(2, 180);
+        servo_controller.move_servo(3, 180);
+
+        Timer::after(Duration::from_secs(2)).await;
+    }
 }
