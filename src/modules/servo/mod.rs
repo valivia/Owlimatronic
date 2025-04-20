@@ -122,6 +122,16 @@ impl<'a> ServoController<'a> {
             .unwrap();
     }
 
+    pub fn release_servo(&mut self, servo_index: usize) {
+        if servo_index >= SERVO_COUNT {
+            panic!("Servo index out of bounds");
+        }
+
+        let servo = &mut self.servos[servo_index];
+
+        servo.set_duty(0).unwrap();
+    }
+
     fn get_calibrated_angle(servo_index: usize, target_angle: u16) -> u16 {
         if servo_index >= SERVO_COUNT {
             panic!("Servo index out of bounds");

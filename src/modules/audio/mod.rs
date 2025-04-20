@@ -6,6 +6,7 @@ use esp_idf_hal::{
     },
     peripheral::Peripheral,
 };
+use log::info;
 
 pub struct AudioController<'a> {
     driver: I2sDriver<'a, I2sTx>,
@@ -37,6 +38,10 @@ impl<'a> AudioController<'a> {
     }
 
     pub fn play(&mut self, data: &[u8]) {
-        self.driver.write(data, 1000).unwrap();
+        info!("Playing audio");
+        self.driver.tx_enable().unwrap();
+        self.driver.write_all(data, 1000).unwrap();
+        self.driver.tx_disable().unwrap();
+        info!("Finished audio");
     }
 }

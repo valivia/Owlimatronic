@@ -51,13 +51,15 @@ fn main() -> Result<()> {
         }
     };
 
-    let audio = AudioController::new(
+    let mut audio = AudioController::new(
         peripherals.i2s0,
         AudioConfig {
-            clk: peripherals.pins.gpio35.into(),
-            dout: peripherals.pins.gpio36.into(),
+            clk: peripherals.pins.gpio36.into(),
+            dout: peripherals.pins.gpio37.into(),
         },
     );
+
+    let hoot = include_bytes!("modules/audio/owl.pcm");
 
     let mut servo = ServoController::new(peripherals.ledc);
 
@@ -76,7 +78,8 @@ fn main() -> Result<()> {
         servo.set_angle(2, 90);
         servo.set_angle(3, 90);
         led.set_pixel(RGB8::new(0, 50, 0))?;
-        std::thread::sleep(std::time::Duration::from_secs(3));
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        audio.play(hoot);
 
         info!("Setting servo to 180");
         servo.set_angle(0, 180);
@@ -84,6 +87,13 @@ fn main() -> Result<()> {
         servo.set_angle(2, 180);
         servo.set_angle(3, 180);
         led.set_pixel(RGB8::new(0, 0, 50))?;
-        std::thread::sleep(std::time::Duration::from_secs(3));
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        led.set_pixel(RGB8::new(50, 50, 50))?;
+        servo.release_servo(0);
+        servo.release_servo(1);
+        servo.release_servo(2);
+        servo.release_servo(3);
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }

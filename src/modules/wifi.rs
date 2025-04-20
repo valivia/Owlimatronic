@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use esp_idf_hal::sys::nvs_flash_init;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::peripheral,
@@ -21,6 +22,8 @@ pub fn wifi(
         auth_method = AuthMethod::None;
         info!("Wifi password is empty");
     }
+
+    unsafe { nvs_flash_init() };
 
     let mut esp_wifi = EspWifi::new(modem, sysloop.clone(), None)?;
 
