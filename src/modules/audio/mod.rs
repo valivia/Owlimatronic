@@ -1,3 +1,8 @@
+use std::{
+    sync::mpmc::{channel, Receiver, Sender},
+    thread,
+};
+
 use esp_idf_hal::{
     gpio::AnyOutputPin,
     i2s::{
@@ -6,7 +11,10 @@ use esp_idf_hal::{
     },
     peripheral::Peripheral,
 };
-use log::info;
+use files::AudioFiles;
+use log::{info, warn};
+
+pub mod files;
 
 pub struct AudioController<'a> {
     driver: I2sDriver<'a, I2sTx>,
@@ -35,6 +43,26 @@ impl<'a> AudioController<'a> {
         let driver = I2sDriver::new_pdm_tx(i2s, &cfg, config.clk, config.dout, ws).unwrap();
 
         return AudioController { driver };
+    }
+
+    pub fn start_audio_thread(controller: AudioController<'static>) -> Sender<AudioFiles> {
+        let (tx, rx): (Sender<AudioFiles>, Receiver<AudioFiles>) = channel();
+
+        thread::spawn(move || {
+            let mut controller = controller;
+
+            for audio_file in rx {
+                let data = audio_file.get_file();
+
+                // Log and play
+                info!("Audio thread received");
+                controller.play(data);
+            }
+
+            warn!("Audio thread exited.");
+        });
+
+        tx
     }
 
     pub fn play(&mut self, data: &[u8]) {

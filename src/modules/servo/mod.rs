@@ -2,9 +2,9 @@ use esp_idf_hal::gpio::AnyOutputPin;
 use esp_idf_hal::ledc::{self};
 use esp_idf_hal::ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver};
 use esp_idf_hal::prelude::*;
-use log::info;
+use log::{debug, info};
 
-struct ServoConfig {
+pub struct ServoConfig {
     pub pin: i32,
     pub name: &'static str,
 
@@ -17,8 +17,11 @@ struct ServoConfig {
 const MIN_DUTY: u16 = 500;
 const MAX_DUTY: u16 = 2400;
 
-const SERVO_COUNT: usize = 4;
-const SERVOS: [ServoConfig; SERVO_COUNT] = [
+const SERVO_MIN: u16 = 0;
+const SERVO_MAX: u16 = 1000;
+
+pub const SERVO_COUNT: usize = 4;
+pub const SERVOS: [ServoConfig; SERVO_COUNT] = [
     ServoConfig {
         pin: 16,
         name: "Beak",
@@ -69,7 +72,7 @@ impl<'a> ServoController<'a> {
         info!("Registering {} servos", SERVO_COUNT);
 
         // Create the LEDC drivers for each servo
-        let mut servos = [
+        let servos = [
             LedcDriver::new(ledc.channel0, &timer_driver, unsafe {
                 AnyOutputPin::new(SERVOS[0].pin)
             })
@@ -90,16 +93,14 @@ impl<'a> ServoController<'a> {
 
         info!("Setting up {} servos", SERVO_COUNT);
 
-        // Set the default position for each servo
-        for (i, servo) in servos.iter_mut().enumerate() {
-            let config = &SERVOS[i];
-            let pos = ServoController::get_calibrated_angle(i, config.default_position);
-            let pulse_width = ServoController::map(pos, 0, 180, MIN_DUTY, MAX_DUTY);
-            servo.set_duty(pulse_width.into()).unwrap();
-        }
+        let mut servo_controller = Self { servos };
 
-        Self { servos }
+        servo_controller.reset_all_servos();
+
+        return servo_controller;
     }
+
+    // Move
 
     pub fn set_angle(&mut self, servo_index: usize, target_angle: u16) {
         if servo_index >= SERVO_COUNT {
@@ -109,10 +110,10 @@ impl<'a> ServoController<'a> {
         let servo = &mut self.servos[servo_index];
         let config = &SERVOS[servo_index];
 
-        let pos = ServoController::get_calibrated_angle(servo_index, target_angle);
+        let pos = ServoController::get_calibrated_angle(config, target_angle);
         let pulse_width = ServoController::map(pos, 0, 180, MIN_DUTY, MAX_DUTY);
 
-        info!(
+        debug!(
             "Moving {} ({}) to {} ({} us)",
             config.name, config.pin, pos, pulse_width
         );
@@ -122,26 +123,40 @@ impl<'a> ServoController<'a> {
             .unwrap();
     }
 
-    pub fn release_servo(&mut self, servo_index: usize) {
-        if servo_index >= SERVO_COUNT {
-            panic!("Servo index out of bounds");
+    // Release
+
+    pub fn reset_all_servos(&mut self) {
+        for (i, servo) in self.servos.iter_mut().enumerate() {
+            let config = &SERVOS[i];
+            ServoController::reset_to_base_position(servo, config);
         }
+    }
 
-        let servo = &mut self.servos[servo_index];
+    fn reset_to_base_position(servo: &mut LedcDriver<'a>, config: &ServoConfig) {
+        let pos = ServoController::get_calibrated_angle(config, config.default_position);
+        let pulse_width = ServoController::map(pos, 0, 180, MIN_DUTY, MAX_DUTY);
+        servo.set_duty(pulse_width.into()).unwrap();
+    }
 
+    // Release
+
+    pub fn release_servo(servo: &mut LedcDriver<'a>) {
         servo.set_duty(0).unwrap();
     }
 
-    fn get_calibrated_angle(servo_index: usize, target_angle: u16) -> u16 {
-        if servo_index >= SERVO_COUNT {
-            panic!("Servo index out of bounds");
+    pub fn release_all_servos(&mut self) {
+        for (_i, servo) in self.servos.iter_mut().enumerate() {
+            ServoController::release_servo(servo);
         }
+    }
 
-        let config = &SERVOS[servo_index];
+    // Util
+
+    fn get_calibrated_angle(config: &ServoConfig, target_angle: u16) -> u16 {
         let pos = ServoController::map(
-            target_angle,
-            0 as u16,
-            180 as u16,
+            target_angle.clamp(SERVO_MIN, SERVO_MAX),
+            SERVO_MIN,
+            SERVO_MAX,
             config.min.into(),
             config.max.into(),
         );
@@ -153,7 +168,7 @@ impl<'a> ServoController<'a> {
         ((us as u32 * 16384) / 20_000) as u16
     }
 
-    fn map(x: u16, in_min: u16, in_max: u16, out_min: u16, out_max: u16) -> u16 {
+    pub fn map(x: u16, in_min: u16, in_max: u16, out_min: u16, out_max: u16) -> u16 {
         let x = x as i32;
         let in_min = in_min as i32;
         let in_max = in_max as i32;

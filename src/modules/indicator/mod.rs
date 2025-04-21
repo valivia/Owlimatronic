@@ -31,11 +31,10 @@ impl<'d> WS2812RMT<'d> {
         let t1h = Pulse::new_with_duration(ticks_hz, PinState::High, &ns(700))?;
         let t1l = Pulse::new_with_duration(ticks_hz, PinState::Low, &ns(600))?;
         let mut signal = FixedLengthSignal::<24>::new();
-        for i in (0..24).rev() {
-            let p = 2_u32.pow(i);
-            let bit = p & color != 0;
+        for i in 0..24 {
+            let bit = (color >> (23 - i)) & 1 != 0;
             let (high_pulse, low_pulse) = if bit { (t1h, t1l) } else { (t0h, t0l) };
-            signal.set(23 - i as usize, &(high_pulse, low_pulse))?;
+            signal.set(i, &(high_pulse, low_pulse))?;
         }
         self.tx_rtm_driver.start_blocking(&signal)?;
 

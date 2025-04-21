@@ -23,6 +23,8 @@ pub fn wifi(
         info!("Wifi password is empty");
     }
 
+    info!("Connecting to Wi-Fi network: {}... ({})", ssid, pass);
+
     unsafe { nvs_flash_init() };
 
     let mut esp_wifi = EspWifi::new(modem, sysloop.clone(), None)?;
