@@ -3,12 +3,16 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::timer::systimer::SystemTimer;
+use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
-use modules::servo::ServoController;
+use modules::audio::{audio_task, AudioService};
+use modules::connectivity::wifi::wifi_init;
+use modules::interaction::interaction_task;
+use modules::mode::{initialize_mode, SystemMode};
+use modules::servo::controller::ServoController;
+use modules::servo::servo_task;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -26,48 +30,54 @@ async fn main(spawner: Spawner) {
 
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
-    let timer0 = SystemTimer::new(peripherals.SYSTIMER);
-    esp_hal_embassy::init(timer0.alarm0);
+    let timg1 = TimerGroup::new(peripherals.TIMG1);
+    esp_hal_embassy::init(timg1.timer0);
+
+    let rng = Rng::new(peripherals.RNG);
 
     info!("Embassy initialized!");
 
-    let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let _init = esp_wifi::init(
-        timer1.timer0,
-        esp_hal::rng::Rng::new(peripherals.RNG),
-        peripherals.RADIO_CLK,
+    // Mode
+    let system_mode = initialize_mode(peripherals.GPIO8.into(), peripherals.GPIO9.into()).await;
+
+    // Indicator
+
+    // Servos
+    let servo_controller = ServoController::new(
+        peripherals.MCPWM0,
+        peripherals.GPIO16.into(),
+        peripherals.GPIO15.into(),
+        peripherals.GPIO14.into(),
+        peripherals.GPIO13.into(),
     )
-    .unwrap();
+    .await;
 
-    // TODO: Spawn some tasks
-    let _ = spawner;
+    spawner.spawn(servo_task(servo_controller)).unwrap();
 
-    let mut servo_controller = ServoController::new();
+    // Interaction
+    spawner
+        .spawn(interaction_task(peripherals.GPIO6.into()))
+        .unwrap();
 
-    loop {
-        info!("spinning to 0");
+    // Audio
+    // let audio_controller = AudioService::new(
+    //     peripherals.I2S0,
+    //     peripherals.DMA_CH0,
+    //     peripherals.GPIO36.into(),
+    //     peripherals.GPIO37.into(),
+    // ).await;
 
-        servo_controller.move_servo(0, 0);
-        servo_controller.move_servo(1, 0);
-        servo_controller.move_servo(2, 0);
-        servo_controller.move_servo(3, 0);
+    // spawner.spawn(audio_task(audio_controller)).unwrap();
 
-        Timer::after(Duration::from_secs(2)).await;
-        info!("spinning to 90");
-
-        servo_controller.move_servo(0, 90);
-        servo_controller.move_servo(1, 90);
-        servo_controller.move_servo(2, 90);
-        servo_controller.move_servo(3, 90);
-
-        Timer::after(Duration::from_secs(2)).await;
-        info!("spinning to 180");
-
-        servo_controller.move_servo(0, 180);
-        servo_controller.move_servo(1, 180);
-        servo_controller.move_servo(2, 180);
-        servo_controller.move_servo(3, 180);
-
-        Timer::after(Duration::from_secs(2)).await;
+    // Wifi
+    if system_mode == SystemMode::Mailbox {
+        let wifi_stack = wifi_init(
+            spawner,
+            peripherals.TIMG0,
+            peripherals.RADIO_CLK,
+            peripherals.WIFI,
+            rng.clone(),
+        )
+        .await;
     }
 }
