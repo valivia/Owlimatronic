@@ -6,6 +6,9 @@ use esp_hal::{
     gpio::{AnyPin, Event, Input, InputConfig, Pull, WakeEvent},
     system::software_reset,
 };
+use rgb::RGB8;
+
+use crate::modules::indicator::INDICATOR_QUEUE;
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum SystemMode {
@@ -27,10 +30,18 @@ pub async fn initialize_mode(mode_pin_1: AnyPin, mode_pin_2: AnyPin) -> SystemMo
     };
 
     match system_mode {
-        SystemMode::Play => info!("System mode: Play"),
-        SystemMode::Mailbox => info!("System mode: Mailbox"),
+        SystemMode::Play => {
+            info!("System mode: Play");
+            INDICATOR_QUEUE.signal(RGB8::new(0, 255, 0));
+        }
+        SystemMode::Mailbox => {
+            info!("System mode: Mailbox");
+            INDICATOR_QUEUE.signal(RGB8::new(0, 0, 255));
+        }
         SystemMode::Off => {
             info!("off");
+            INDICATOR_QUEUE.signal(RGB8::new(0, 0, 0));
+            Timer::after(embassy_time::Duration::from_millis(100)).await;
 
             common_state.listen(Event::LowLevel);
             common_state

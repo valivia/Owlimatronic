@@ -7,8 +7,8 @@ use esp_hal::clock::CpuClock;
 use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
-use modules::audio::{audio_task, AudioService};
 use modules::connectivity::wifi::wifi_init;
+use modules::indicator::indicator_task;
 use modules::interaction::interaction_task;
 use modules::mode::{initialize_mode, SystemMode};
 use modules::servo::controller::ServoController;
@@ -37,10 +37,13 @@ async fn main(spawner: Spawner) {
 
     info!("Embassy initialized!");
 
+    // Indicator
+    spawner
+        .spawn(indicator_task(peripherals.RMT, peripherals.GPIO21.into()))
+        .unwrap();
+
     // Mode
     let system_mode = initialize_mode(peripherals.GPIO8.into(), peripherals.GPIO9.into()).await;
-
-    // Indicator
 
     // Servos
     let servo_controller = ServoController::new(
