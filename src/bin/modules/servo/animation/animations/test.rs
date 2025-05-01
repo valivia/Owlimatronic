@@ -3,7 +3,7 @@ use crate::modules::{
     servo::animation::{easing::Easing, Animation, Frame},
 };
 
-pub static TEST_ANIMATION: &Animation = &[
+pub static ANIMATION: &Animation = &[
     Some(Frame::default()),
     Some(Frame {
         beak_servo: Some((1000, Easing::CubicInOut)),

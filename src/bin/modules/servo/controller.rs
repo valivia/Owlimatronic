@@ -9,11 +9,10 @@ use esp_hal::{
 use num_traits::float::FloatCore;
 
 use crate::modules::{
-    servo::{
+    audio::AUDIO_QUEUE, servo::{
         animation::{FRAME_DURATION, INTERPOLATION_STEPS},
         config::{SERVO_MAX, SERVO_MIN},
-    },
-    util::map_range_clamped,
+    }, util::map_range_clamped
 };
 
 use super::{
@@ -39,6 +38,7 @@ impl ServoController {
 
         // Connect operator0 to timer0
         mcpwm.operator0.set_timer(&mcpwm.timer0);
+        mcpwm.operator1.set_timer(&mcpwm.timer0);
 
         let op0 = mcpwm.operator0;
         let op1 = mcpwm.operator1;
@@ -123,12 +123,11 @@ impl ServoController {
         let mut next_servo_frame_index: [Option<usize>; SERVO_COUNT] = [None; SERVO_COUNT];
 
         for frame_index in 0..animation.len() {
-            info!("### Frame {}/{} ###", frame_index, total_frames - 1);
 
             // Play audio if present
             if let Some(frame) = &animation[frame_index] {
                 if let Some(audio) = &frame.audio {
-                    // audio_player.send(audio.clone()).unwrap();
+                    AUDIO_QUEUE.send(audio.clone()).await;
                 }
             }
 

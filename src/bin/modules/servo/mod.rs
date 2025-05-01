@@ -44,10 +44,6 @@ impl<'a> Servo<'a> {
             servo_config.min_duty_cycle as i32,
             servo_config.max_duty_cycle as i32,
         );
-        // info!(
-        //     "Moving {} to {} ({} us)",
-        //     servo_config.name, value, position
-        // );
         self.set_timestamp(position as u16);
     }
 
