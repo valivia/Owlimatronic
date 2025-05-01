@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{info, warn};
 use embassy_time::{Duration, Timer};
 use esp_hal::{
     gpio::AnyPin,
@@ -6,65 +6,27 @@ use esp_hal::{
     peripherals::MCPWM0,
     time::Rate,
 };
+use num_traits::float::FloatCore;
 
 use crate::modules::{
-    animation::ANIMATION_QUEUE,
-    servo::config::{SERVO_MAX, SERVO_MIN},
+    servo::{
+        animation::{FRAME_DURATION, INTERPOLATION_STEPS},
+        config::{SERVO_MAX, SERVO_MIN},
+    },
     util::map_range_clamped,
 };
 
-use super::{config::SERVO_COUNT, Servo};
+use super::{
+    animation::{easing::Easing, Animation, ANIMATION_QUEUE},
+    config::SERVO_COUNT,
+    Servo,
+};
 
-static TEST_ANIMATION: [[u16; 140]; SERVO_COUNT] = [
-    [
-        0, 1, 4, 14, 32, 63, 108, 172, 256, 364, 500, 636, 744, 829, 892, 938, 968, 987, 996, 1000,
-        1000, 1000, 996, 987, 968, 938, 892, 829, 744, 636, 500, 365, 256, 172, 108, 63, 32, 13, 4,
-        1, 0, 0, 0, 0, 1, 1, 2, 3, 4, 6, 8, 10, 14, 17, 21, 26, 32, 38, 46, 54, 63, 72, 83, 95,
-        108, 122, 137, 154, 172, 191, 211, 233, 256, 281, 307, 335, 364, 396, 429, 463, 500, 537,
-        571, 604, 636, 665, 693, 719, 744, 767, 789, 809, 829, 846, 863, 878, 892, 905, 917, 928,
-        938, 946, 954, 962, 968, 974, 979, 983, 987, 990, 992, 994, 996, 997, 998, 999, 1000, 1000,
-        1000, 1000, 1000, 1000, 996, 987, 968, 938, 892, 829, 744, 636, 500, 365, 256, 172, 108,
-        63, 32, 13, 4, 1,
-    ],
-    [
-        477, 477, 476, 475, 471, 466, 458, 447, 432, 412, 389, 365, 345, 330, 319, 311, 306, 302,
-        301, 300, 300, 300, 300, 301, 302, 303, 305, 309, 313, 318, 325, 333, 343, 355, 369, 384,
-        402, 423, 446, 471, 500, 529, 554, 577, 598, 616, 631, 645, 657, 667, 675, 682, 687, 691,
-        695, 697, 698, 699, 700, 700, 700, 700, 700, 700, 700, 700, 699, 699, 698, 697, 696, 695,
-        694, 692, 690, 688, 685, 682, 678, 675, 670, 666, 661, 655, 649, 642, 635, 627, 619, 610,
-        600, 590, 581, 573, 565, 558, 551, 545, 539, 534, 530, 525, 522, 518, 515, 513, 510, 508,
-        506, 505, 504, 503, 502, 501, 501, 500, 500, 500, 500, 500, 500, 500, 500, 500, 499, 499,
-        498, 496, 494, 492, 489, 485, 483, 481, 479, 478, 478, 477, 477, 477,
-    ],
-    [
-        0, 0, 1, 2, 4, 8, 14, 21, 32, 46, 63, 83, 108, 137, 172, 211, 256, 307, 364, 429, 500, 571,
-        636, 693, 744, 789, 829, 863, 892, 917, 938, 954, 968, 979, 987, 992, 996, 998, 1000, 1000,
-        1000, 1000, 1000, 1000, 1000, 999, 998, 997, 996, 994, 992, 990, 987, 983, 979, 974, 968,
-        962, 954, 946, 938, 928, 917, 905, 892, 878, 863, 846, 829, 809, 789, 767, 744, 719, 693,
-        665, 636, 604, 571, 537, 500, 463, 429, 396, 365, 335, 307, 281, 256, 233, 211, 191, 172,
-        154, 137, 122, 108, 95, 83, 72, 63, 54, 46, 38, 32, 26, 21, 17, 13, 10, 8, 6, 4, 3, 2, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ],
-    [
-        0, 0, 1, 2, 4, 8, 14, 21, 32, 46, 63, 83, 108, 137, 172, 211, 256, 307, 364, 429, 500, 571,
-        636, 693, 744, 789, 829, 863, 892, 917, 938, 954, 968, 979, 987, 992, 996, 998, 1000, 1000,
-        1000, 1000, 1000, 1000, 1000, 999, 998, 997, 996, 994, 992, 990, 987, 983, 979, 974, 968,
-        962, 954, 946, 938, 928, 917, 905, 892, 878, 863, 846, 829, 809, 789, 767, 744, 719, 693,
-        665, 636, 604, 571, 537, 500, 463, 429, 396, 365, 335, 307, 281, 256, 233, 211, 191, 172,
-        154, 137, 122, 108, 95, 83, 72, 63, 54, 46, 38, 32, 26, 21, 17, 13, 10, 8, 6, 4, 3, 2, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ],
-];
-
-const KEYFRAME_DURATION: u64 = 250;
-const INTERPOLATION_STEPS: u64 = 20;
-
-const FRAME_DURATION: Duration = Duration::from_millis(KEYFRAME_DURATION / INTERPOLATION_STEPS);
-pub struct ServoController<'a> {
-    servos: [Servo<'a>; SERVO_COUNT],
+pub struct ServoController {
+    servos: [Servo<'static>; SERVO_COUNT],
 }
 
-impl<'a> ServoController<'a> {
+impl ServoController {
     pub async fn new(
         mc_pwm: MCPWM0,
         beak_pin: AnyPin,
@@ -125,10 +87,11 @@ impl<'a> ServoController<'a> {
     }
 
     pub async fn run_loop(&mut self) {
-        ANIMATION_QUEUE.receive().await;
-        self.run_animation(TEST_ANIMATION).await;
+        let animation = ANIMATION_QUEUE.receive().await;
+        self.run_animation(animation.get_animation()).await;
     }
 
+    // Control
     fn reset_servos(&mut self) {
         info!("Resetting servos to default positions");
         for servo in &mut self.servos {
@@ -137,8 +100,8 @@ impl<'a> ServoController<'a> {
                 servo_config.default_position as i32,
                 SERVO_MIN as i32,
                 SERVO_MAX as i32,
-                servo_config.min as i32,
-                servo_config.max as i32,
+                servo_config.min_duty_cycle as i32,
+                servo_config.max_duty_cycle as i32,
             );
             servo.set_timestamp(position as u16);
         }
@@ -151,23 +114,218 @@ impl<'a> ServoController<'a> {
         }
     }
 
-    async fn run_animation(&mut self, animation: [[u16; 140]; SERVO_COUNT]) {
-        info!("Running animation {}", animation);
-        let total_frames = TEST_ANIMATION[0].len();
+    // Animation
+    pub async fn run_animation(&mut self, animation: &Animation) {
+        info!("Running animation");
+        let total_frames = animation.len();
 
-        for frame_index in 0..total_frames {
-            info!("Interpolated Frame {}/{}", frame_index + 1, total_frames);
+        let mut previous_servo_frame_index: [Option<usize>; SERVO_COUNT] = [None; SERVO_COUNT];
+        let mut next_servo_frame_index: [Option<usize>; SERVO_COUNT] = [None; SERVO_COUNT];
 
-            // Set servo angles
-            for servo_index in 0..SERVO_COUNT {
-                let servo_track = &animation[servo_index];
-                let target = servo_track[frame_index as usize];
-                self.servos[servo_index].move_to(target);
+        for frame_index in 0..animation.len() {
+            info!("### Frame {}/{} ###", frame_index, total_frames - 1);
+
+            // Play audio if present
+            if let Some(frame) = &animation[frame_index] {
+                if let Some(audio) = &frame.audio {
+                    // audio_player.send(audio.clone()).unwrap();
+                }
             }
 
-            Timer::after(FRAME_DURATION).await;
+            // Get the frames to interpolate from
+            ServoController::get_surrounding_frame_indices(
+                &mut next_servo_frame_index,
+                &mut previous_servo_frame_index,
+                animation,
+                frame_index,
+            );
+
+            if frame_index == total_frames - 1 {
+                for servo_index in 0..SERVO_COUNT {
+                    if let Some(target) = animation[frame_index]
+                        .as_ref()
+                        .unwrap()
+                        .get_servo(servo_index)
+                    {
+                        self.servos[servo_index].set_timestamp(target.0);
+                    }
+                }
+                break;
+            }
+
+            // Play the servo frames
+            for interpolation_index in 0..INTERPOLATION_STEPS {
+                // Set servo angles
+                for servo_index in 0..SERVO_COUNT {
+                    let from = match previous_servo_frame_index[servo_index] {
+                        Some(index) => Some((
+                            animation[index]
+                                .as_ref()
+                                .unwrap()
+                                .get_servo(servo_index)
+                                .unwrap()
+                                .0,
+                            index,
+                        )),
+                        None => None,
+                    };
+
+                    let to = match next_servo_frame_index[servo_index] {
+                        Some(index) => {
+                            let frame = animation[index]
+                                .as_ref()
+                                .unwrap()
+                                .get_servo(servo_index)
+                                .unwrap();
+                            Some((frame.0, frame.1, index))
+                        }
+                        None => None,
+                    };
+
+                    if let (Some(from), Some(to)) = (from, to) {
+                        let (from_value, from_index) = from;
+                        let (to_value, easing, to_index) = to;
+
+                        // No need to interpolate if the values are the same
+                        if to_value == from_value {
+                            continue;
+                        }
+
+                        let frame_span = to_index - from_index;
+                        let total_keyframe_steps = INTERPOLATION_STEPS * frame_span as u32;
+                        let current_frame_in_span = (frame_index - from_index) as u32;
+                        let current_step =
+                            current_frame_in_span * INTERPOLATION_STEPS + interpolation_index + 1;
+
+                        let t = current_step as f32 / total_keyframe_steps as f32;
+                        let target = Self::interpolate(from_value, to_value, t, &easing);
+
+                        if (t > 1.0) || (t < 0.0) {
+                            warn!("Interpolation out of bounds: t = {}", t);
+                        }
+
+                        self.servos[servo_index].move_to(target);
+                    }
+                }
+
+                Timer::after(FRAME_DURATION).await;
+            }
         }
 
+        info!("Animation completed!");
         self.release_servos();
+    }
+
+    fn get_surrounding_frame_indices(
+        next_servo_frame_index: &mut [Option<usize>; SERVO_COUNT],
+        previous_servo_frame_index: &mut [Option<usize>; SERVO_COUNT],
+        animation: &Animation,
+        frame_index: usize,
+    ) {
+        for servo_index in 0..SERVO_COUNT {
+            // Previous servo frame
+            let mut should_fetch_previous = false;
+
+            // if we exceeded the last known previous index, we need to fetch the previous one
+            if let Some(last_known_previous_index) = previous_servo_frame_index[servo_index] {
+                if last_known_previous_index < frame_index && frame_index != animation.len() - 1 {
+                    should_fetch_previous = true;
+                }
+            }
+
+            // if we are at the first frame, we need to fetch previous frame.
+            if frame_index == 0 {
+                should_fetch_previous = true;
+            }
+
+            if should_fetch_previous {
+                previous_servo_frame_index[servo_index] =
+                    ServoController::get_closest_servo_keyframe_index(
+                        animation,
+                        frame_index,
+                        servo_index,
+                        false,
+                    );
+            }
+
+            // Next servo frame
+            let mut should_fetch_next = false;
+
+            // If we hit the last known next index, we need to fetch the next one
+            if let Some(last_known_next_index) = next_servo_frame_index[servo_index] {
+                if last_known_next_index == frame_index
+                    && last_known_next_index != animation.len() - 1
+                {
+                    should_fetch_next = true;
+                }
+            }
+
+            // if we are at the first frame, we need to fetch next frame.
+            if frame_index == 0 {
+                should_fetch_next = true;
+            }
+
+            // Get the next servo frame
+            if should_fetch_next {
+                next_servo_frame_index[servo_index] =
+                    ServoController::get_closest_servo_keyframe_index(
+                        animation,
+                        frame_index + 1,
+                        servo_index,
+                        true,
+                    );
+            }
+        }
+    }
+
+    fn get_closest_servo_keyframe_index(
+        animation: &Animation,
+        start_index: usize,
+        servo_index: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        let len = animation.len();
+        let mut index = start_index;
+
+        loop {
+            if index >= len {
+                break;
+            }
+
+            if let Some(frame) = &animation[index] {
+                let keyframe = match servo_index {
+                    0 => frame.beak_servo,
+                    1 => frame.neck_servo,
+                    2 => frame.wing_right_servo,
+                    3 => frame.wing_left_servo,
+                    _ => None,
+                };
+
+                if keyframe.is_some() {
+                    return Some(index);
+                }
+            }
+
+            if forward {
+                index += 1;
+                if index >= len {
+                    break;
+                }
+            } else {
+                if index == 0 {
+                    break;
+                }
+                index -= 1;
+            }
+        }
+
+        None
+    }
+
+    fn interpolate(from: u16, to: u16, t: f32, easing: &Easing) -> u16 {
+        let eased_t = easing.ease(t);
+        let delta = to as f32 - from as f32;
+        let interpolated_value = from as f32 + (delta * eased_t);
+        interpolated_value.round() as u16
     }
 }

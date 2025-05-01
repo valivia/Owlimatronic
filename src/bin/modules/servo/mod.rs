@@ -6,9 +6,10 @@ use crate::modules::util::map_range_clamped;
 
 pub mod config;
 pub mod controller;
+pub mod animation;
 
 #[embassy_executor::task]
-pub async fn servo_task(mut controller: ServoController<'static>) {
+pub async fn servo_task(mut controller: ServoController) {
 
     info!("Servo task started");
 
@@ -40,13 +41,13 @@ impl<'a> Servo<'a> {
             value as i32,
             config::SERVO_MIN as i32,
             config::SERVO_MAX as i32,
-            servo_config.min as i32,
-            servo_config.max as i32,
+            servo_config.min_duty_cycle as i32,
+            servo_config.max_duty_cycle as i32,
         );
-        info!(
-            "Moving {} to {} ({} us)",
-            servo_config.name, value, position
-        );
+        // info!(
+        //     "Moving {} to {} ({} us)",
+        //     servo_config.name, value, position
+        // );
         self.set_timestamp(position as u16);
     }
 

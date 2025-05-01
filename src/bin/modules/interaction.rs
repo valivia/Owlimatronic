@@ -1,7 +1,8 @@
-use crate::modules::animation::ANIMATION_QUEUE;
 use defmt::info;
 use embassy_time::Timer;
 use esp_hal::gpio::{AnyPin, Event, Input, InputConfig, Pull};
+
+use crate::modules::servo::animation::{animations::Animations, ANIMATION_QUEUE};
 
 #[embassy_executor::task]
 pub async fn interaction_task(beak_pin: AnyPin) {
@@ -23,7 +24,7 @@ pub async fn interaction_task(beak_pin: AnyPin) {
             continue;
         }
         info!("Beak button pressed");
-        ANIMATION_QUEUE.send(1).await;
+        ANIMATION_QUEUE.send(Animations::Test).await;
     }
 }
 
