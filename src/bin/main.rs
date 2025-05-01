@@ -7,6 +7,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
+use modules::audio::{audio_task, AudioService};
 use modules::connectivity::wifi::wifi_init;
 use modules::indicator::indicator_task;
 use modules::interaction::interaction_task;
@@ -63,14 +64,16 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     // Audio
-    // let audio_controller = AudioService::new(
-    //     peripherals.I2S0,
-    //     peripherals.DMA_CH0,
-    //     peripherals.GPIO36.into(),
-    //     peripherals.GPIO37.into(),
-    // ).await;
 
-    // spawner.spawn(audio_task(audio_controller)).unwrap();
+    spawner
+        .spawn(audio_task(
+            peripherals.I2S0,
+            peripherals.DMA_CH0,
+            peripherals.GPIO36.into(),
+            peripherals.GPIO37.into(),
+            peripherals.GPIO35.into(),
+        ))
+        .unwrap();
 
     // Wifi
     if system_mode == SystemMode::Mailbox {
