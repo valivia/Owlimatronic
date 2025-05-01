@@ -8,18 +8,9 @@ use esp_hal::{
 };
 use num_traits::float::FloatCore;
 
-use crate::modules::{
-    audio::AUDIO_QUEUE, servo::{
-        animation::{FRAME_DURATION, INTERPOLATION_STEPS},
-        config::{SERVO_MAX, SERVO_MIN},
-    }, util::map_range_clamped
-};
+use crate::modules::{audio::AUDIO_QUEUE, servo::{animation::{FRAME_DURATION, INTERPOLATION_STEPS}, config::{SERVO_MAX, SERVO_MIN}}, util::map_range_clamped};
 
-use super::{
-    animation::{easing::Easing, Animation, ANIMATION_QUEUE},
-    config::SERVO_COUNT,
-    Servo,
-};
+use super::{animation::{Animation, ANIMATION_QUEUE}, config::SERVO_COUNT, easing::Easing, Servo};
 
 pub struct ServoController {
     servos: [Servo<'static>; SERVO_COUNT],
@@ -123,7 +114,6 @@ impl ServoController {
         let mut next_servo_frame_index: [Option<usize>; SERVO_COUNT] = [None; SERVO_COUNT];
 
         for frame_index in 0..animation.len() {
-
             // Play audio if present
             if let Some(frame) = &animation[frame_index] {
                 if let Some(audio) = &frame.audio {

@@ -7,6 +7,8 @@ use crate::modules::util::map_range_clamped;
 pub mod config;
 pub mod controller;
 pub mod animation;
+pub mod animations;
+pub mod easing;
 
 #[embassy_executor::task]
 pub async fn servo_task(mut controller: ServoController) {

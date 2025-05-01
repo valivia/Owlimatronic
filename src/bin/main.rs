@@ -7,7 +7,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
-use modules::audio::{audio_task, AudioService};
+use modules::audio::audio_task;
 use modules::connectivity::wifi::wifi_init;
 use modules::indicator::indicator_task;
 use modules::interaction::interaction_task;

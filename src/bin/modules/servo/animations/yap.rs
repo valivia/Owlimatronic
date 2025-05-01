@@ -1,6 +1,8 @@
 use crate::modules::{
     audio::tracks::Tracks,
-    servo::{animation::{easing::Easing, Animation, Frame}, config::DEFAULT_NECK_POSITION},
+    servo::{
+        animation::{Animation, Frame}, config::DEFAULT_NECK_POSITION, easing::Easing
+    },
 };
 
 pub static ANIMATION: &Animation = &[

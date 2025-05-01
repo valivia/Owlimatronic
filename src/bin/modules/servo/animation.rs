@@ -1,14 +1,9 @@
-use animations::Animations;
-use easing::Easing;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::Duration;
 
 use crate::modules::audio::tracks::Tracks;
 
-use super::config::{DEFAULT_BEAK_POSITION, DEFAULT_NECK_POSITION, DEFAULT_WING_POSITION};
-
-pub mod animations;
-pub mod easing;
+use super::{animations::AnimationType, config::{DEFAULT_BEAK_POSITION, DEFAULT_NECK_POSITION, DEFAULT_WING_POSITION}, easing::Easing};
 
 pub const KEYFRAME_DURATION: Duration = Duration::from_millis(250);
 pub const INTERPOLATION_STEPS: u32 = 20;
@@ -16,7 +11,7 @@ pub const INTERPOLATION_STEPS: u32 = 20;
 pub const FRAME_DURATION: Duration =
     Duration::from_millis(KEYFRAME_DURATION.as_millis() / INTERPOLATION_STEPS as u64);
 
-pub static ANIMATION_QUEUE: Channel<CriticalSectionRawMutex, Animations, 4> = Channel::new();
+pub static ANIMATION_QUEUE: Channel<CriticalSectionRawMutex, AnimationType, 4> = Channel::new();
 
 type ServoKeyframe = (u16, Easing);
 type AudioKeyframe = Tracks;
@@ -41,7 +36,7 @@ impl Frame {
         }
     }
 
-    const fn default() -> Self {
+    pub const fn default() -> Self {
         Self {
             beak_servo: Some((DEFAULT_BEAK_POSITION, Easing::Linear)),
             neck_servo: Some((DEFAULT_NECK_POSITION, Easing::Linear)),
