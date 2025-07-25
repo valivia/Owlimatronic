@@ -15,6 +15,8 @@ use modules::mode::{initialize_mode, SystemMode};
 use modules::servo::controller::ServoController;
 use modules::servo::servo_task;
 
+use crate::modules::connectivity::mqtt::mqtt_init;
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
@@ -85,5 +87,8 @@ async fn main(spawner: Spawner) {
             rng.clone(),
         )
         .await;
+
+        // MQTT
+        spawner.spawn(mqtt_init(wifi_stack)).ok();
     }
 }

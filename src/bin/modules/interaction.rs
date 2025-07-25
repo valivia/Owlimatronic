@@ -25,7 +25,7 @@ pub async fn interaction_task(beak_pin: AnyPin) {
             continue;
         }
         info!("Beak button pressed");
-        ANIMATION_QUEUE.send(AnimationType::Test).await;
+        ANIMATION_QUEUE.send(AnimationType::Sweep).await;
     }
 }
 

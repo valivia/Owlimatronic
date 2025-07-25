@@ -3,7 +3,11 @@ use embassy_time::Duration;
 
 use crate::modules::audio::tracks::Tracks;
 
-use super::{animations::AnimationType, config::{DEFAULT_BEAK_POSITION, DEFAULT_NECK_POSITION, DEFAULT_WING_POSITION}, easing::Easing};
+use super::{
+    animations::AnimationType,
+    config::{DEFAULT_BEAK_POSITION, DEFAULT_NECK_POSITION, DEFAULT_WING_POSITION},
+    easing::Easing,
+};
 
 pub const KEYFRAME_DURATION: Duration = Duration::from_millis(250);
 pub const INTERPOLATION_STEPS: u32 = 20;
@@ -42,6 +46,16 @@ impl Frame {
             neck_servo: Some((DEFAULT_NECK_POSITION, Easing::Linear)),
             wing_right_servo: Some((DEFAULT_WING_POSITION, Easing::Linear)),
             wing_left_servo: Some((DEFAULT_WING_POSITION, Easing::Linear)),
+            audio: None,
+        }
+    }
+
+    pub const fn empty() -> Self {
+        Self {
+            beak_servo: None,
+            neck_servo: None,
+            wing_right_servo: None,
+            wing_left_servo: None,
             audio: None,
         }
     }
