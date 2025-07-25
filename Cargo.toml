@@ -63,6 +63,9 @@ embassy-futures = { version = "0.1.1", features = ["defmt"] }
 embassy-sync = { version = "0.6.2", features = ["defmt"] }
 rgb = "0.8.50"
 num-traits = { version = "0.2.19", default_features = false }
+rust-mqtt = { version = "0.3.0", default-features = false, features = [
+  "defmt",
+] }
 
 [profile.dev]
 # Rust debug is too slow.

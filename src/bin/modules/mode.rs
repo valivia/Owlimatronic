@@ -32,7 +32,7 @@ pub async fn initialize_mode(mode_pin_1: AnyPin, mode_pin_2: AnyPin) -> SystemMo
     match system_mode {
         SystemMode::Play => {
             info!("System mode: Play");
-            INDICATOR_QUEUE.signal(RGB8::new(0, 255, 0));
+            INDICATOR_QUEUE.signal(RGB8::new(255, 0, 0));
         }
         SystemMode::Mailbox => {
             info!("System mode: Mailbox");
