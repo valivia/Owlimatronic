@@ -6,7 +6,7 @@ use crate::modules::servo::{animation::ANIMATION_QUEUE, animations::AnimationTyp
 
 
 #[embassy_executor::task]
-pub async fn interaction_task(beak_pin: AnyPin) {
+pub async fn interaction_task(beak_pin: AnyPin<'static>) {
     info!("interaction task started");
     let input_button_cfg = InputConfig::default().with_pull(Pull::Up);
 

@@ -3,7 +3,7 @@ use embassy_executor::Spawner;
 use embassy_futures::select::select;
 use embassy_time::Timer;
 use esp_hal::{
-    gpio::{AnyPin, Event, Input, InputConfig, Pull, WakeEvent},
+    gpio::{Event, Input, InputConfig, InputPin, Pull, WakeEvent},
     system::software_reset,
 };
 use rgb::RGB8;
@@ -17,7 +17,10 @@ pub enum SystemMode {
     Off,
 }
 
-pub async fn initialize_mode(mode_pin_1: AnyPin, mode_pin_2: AnyPin) -> SystemMode {
+pub async fn initialize_mode(
+    mode_pin_1: impl InputPin + 'static,
+    mode_pin_2: impl InputPin + 'static,
+) -> SystemMode {
     let input_button_cfg = InputConfig::default().with_pull(Pull::Up);
     let play_state = Input::new(mode_pin_1, input_button_cfg);
     let mut common_state = Input::new(mode_pin_2, input_button_cfg);

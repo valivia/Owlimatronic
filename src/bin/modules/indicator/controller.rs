@@ -2,7 +2,9 @@ use core::time::Duration;
 use esp_hal::{
     gpio::{AnyPin, Level},
     peripherals::RMT,
-    rmt::{Channel, PulseCode, Rmt, TxChannel, TxChannelConfig, TxChannelCreator},
+    rmt::{
+        Channel, ConstChannelAccess, PulseCode, Rmt, TxChannel, TxChannelConfig, TxChannelCreator,
+    },
     time::Rate,
     Blocking,
 };
@@ -12,8 +14,7 @@ const CLOCK_DIVIDER: u8 = 2;
 const CLOCK_RATE: Rate = Rate::from_mhz(80);
 const TICKS_PER_HZ: Rate = Rate::from_mhz(CLOCK_RATE.as_mhz() / CLOCK_DIVIDER as u32);
 
-type LedChannel = Channel<Blocking, 3>;
-
+type LedChannel = Channel<Blocking, ConstChannelAccess<esp_hal::rmt::Tx, 3>>;
 pub struct Indicator(LedChannel);
 
 impl Indicator {
@@ -47,7 +48,7 @@ impl Indicator {
     pub fn new(rmt: RMT, led_pin: AnyPin, initial_color: RGB8) -> Self {
         let rmt = Rmt::new(rmt, Rate::from_mhz(80)).unwrap();
         let tx_config = TxChannelConfig::default().with_clk_divider(CLOCK_DIVIDER);
-        let channel = rmt.channel3.configure(led_pin, tx_config).unwrap();
+        let channel = rmt.channel3.configure_tx(led_pin, tx_config).unwrap();
         let reset_pulse = [Self::reset_pulse()];
         let transaction = channel.transmit(&reset_pulse).unwrap();
         Self(transaction.wait().unwrap()).set_pixel(initial_color)

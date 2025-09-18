@@ -17,6 +17,11 @@ use modules::servo::servo_task;
 
 use crate::modules::connectivity::mqtt::mqtt_init;
 
+// This creates a default app-descriptor required by the esp-idf bootloader.
+// For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
+esp_bootloader_esp_idf::esp_app_desc!();
+
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
@@ -46,15 +51,15 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     // Mode
-    let system_mode = initialize_mode(peripherals.GPIO8.into(), peripherals.GPIO9.into()).await;
+    let system_mode = initialize_mode(peripherals.GPIO8, peripherals.GPIO9).await;
 
     // Servos
     let servo_controller = ServoController::new(
         peripherals.MCPWM0,
-        peripherals.GPIO16.into(),
-        peripherals.GPIO15.into(),
-        peripherals.GPIO14.into(),
-        peripherals.GPIO13.into(),
+        peripherals.GPIO16,
+        peripherals.GPIO15,
+        peripherals.GPIO14,
+        peripherals.GPIO13,
     )
     .await;
 
@@ -82,7 +87,6 @@ async fn main(spawner: Spawner) {
         let wifi_stack = wifi_init(
             spawner,
             peripherals.TIMG0,
-            peripherals.RADIO_CLK,
             peripherals.WIFI,
             rng.clone(),
         )
