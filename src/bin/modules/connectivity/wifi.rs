@@ -4,7 +4,7 @@ use embassy_net::{Runner, Stack, StackResources};
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_hal::{
-    peripherals::{RADIO_CLK, TIMG0, WIFI},
+    peripherals::{TIMG0, WIFI},
     rng::Rng,
     timer::timg::TimerGroup,
 };
@@ -14,7 +14,6 @@ use esp_wifi::{
     wifi::{ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiState},
     EspWifiController,
 };
-use heapless::String;
 
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
@@ -30,16 +29,15 @@ static WIFI_PSK: &str = env!("WIFI_PASS");
 
 pub async fn wifi_init(
     spawner: Spawner,
-    timer1: TIMG0,
-    radio: RADIO_CLK,
-    wifi: WIFI,
+    timer1: TIMG0<'static>,
+    wifi: WIFI<'static>,
     mut rng: Rng,
 ) -> Stack<'static> {
     let timg0 = TimerGroup::new(timer1);
 
     let esp_wifi_ctrl = &*mk_static!(
         EspWifiController<'static>,
-        init(timg0.timer0, rng.clone(), radio).unwrap()
+        init(timg0.timer0, rng.clone()).unwrap()
     );
 
     let (controller, interfaces) = esp_wifi::wifi::new(&esp_wifi_ctrl, wifi).unwrap();
@@ -96,8 +94,8 @@ async fn connection(mut controller: WifiController<'static>) {
         if !matches!(controller.is_started(), Ok(true)) {
             info!("Connecting to {} ({})", WIFI_SSID, WIFI_PSK);
             let client_config = Configuration::Client(ClientConfiguration {
-                ssid: String::try_from(WIFI_SSID).unwrap(),
-                password: String::try_from(WIFI_PSK).unwrap(),
+                ssid: WIFI_SSID.into(),
+                password: WIFI_PSK.into(),
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
@@ -106,9 +104,9 @@ async fn connection(mut controller: WifiController<'static>) {
             println!("Wifi started!");
 
             println!("Scan");
-            let (result, _) = controller.scan_n_async::<10>().await.unwrap();
+            let networks = controller.scan_n_async(10).await.unwrap();
 
-            for ap in result {
+            for ap in networks {
                 println!("{:?}", ap);
             }
         }

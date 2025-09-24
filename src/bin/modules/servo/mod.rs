@@ -1,18 +1,17 @@
+use controller::ServoController;
 use defmt::info;
 use esp_hal::{mcpwm::operator::PwmPin, peripherals::MCPWM0};
-use controller::ServoController;
 
 use crate::modules::util::map_range_clamped;
 
-pub mod config;
-pub mod controller;
 pub mod animation;
 pub mod animations;
+pub mod config;
+pub mod controller;
 pub mod easing;
 
 #[embassy_executor::task]
 pub async fn servo_task(mut controller: ServoController) {
-
     info!("Servo task started");
 
     loop {
@@ -21,10 +20,10 @@ pub async fn servo_task(mut controller: ServoController) {
 }
 
 enum Servo<'a> {
-    ServoBeak(PwmPin<'a, MCPWM0, 0, true>),
-    ServoNeck(PwmPin<'a, MCPWM0, 0, false>),
-    ServoWingR(PwmPin<'a, MCPWM0, 1, true>),
-    ServoWingL(PwmPin<'a, MCPWM0, 1, false>),
+    ServoBeak(PwmPin<'a, MCPWM0<'a>, 0, true>),
+    ServoNeck(PwmPin<'a, MCPWM0<'a>, 0, false>),
+    ServoWingR(PwmPin<'a, MCPWM0<'a>, 1, true>),
+    ServoWingL(PwmPin<'a, MCPWM0<'a>, 1, false>),
 }
 
 impl<'a> Servo<'a> {

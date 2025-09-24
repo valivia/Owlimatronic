@@ -1,12 +1,11 @@
 use defmt::{info, warn};
 use embassy_time::{Duration, Timer};
 use esp_hal::{
-    gpio::AnyPin,
+    gpio::{OutputPin},
     mcpwm::{operator::PwmPinConfig, timer::PwmWorkingMode, McPwm, PeripheralClockConfig},
     peripherals::MCPWM0,
     time::Rate,
 };
-use num_traits::float::FloatCore;
 
 use crate::modules::{audio::AUDIO_QUEUE, servo::{animation::{FRAME_DURATION, INTERPOLATION_STEPS}, config::{SERVO_MAX, SERVO_MIN}}, util::map_range_clamped};
 
@@ -16,13 +15,15 @@ pub struct ServoController {
     servos: [Servo<'static>; SERVO_COUNT],
 }
 
+use num_traits::float::FloatCore;
+
 impl ServoController {
     pub async fn new(
-        mc_pwm: MCPWM0,
-        beak_pin: AnyPin,
-        neck_pin: AnyPin,
-        wing_r_pin: AnyPin,
-        wing_l_pin: AnyPin,
+        mc_pwm: MCPWM0<'static>,
+        beak_pin: impl OutputPin + 'static,
+        neck_pin: impl OutputPin + 'static,
+        wing_r_pin: impl OutputPin + 'static,
+        wing_l_pin: impl OutputPin + 'static,
     ) -> Self {
         let clock_cfg = PeripheralClockConfig::with_frequency(Rate::from_mhz(32)).unwrap();
         let mut mcpwm = McPwm::new(mc_pwm, clock_cfg);

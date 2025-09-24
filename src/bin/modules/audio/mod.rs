@@ -1,10 +1,10 @@
 use defmt::info;
 use embassy_futures::yield_now;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use esp_hal::peripherals::DMA_CH0;
 use esp_hal::{
-    dma::DmaChannel0,
     dma_buffers,
-    gpio::AnyPin,
+    gpio::{AnyPin, OutputPin},
     i2s::master::{DataFormat, I2s, I2sTx, Standard},
     peripherals::I2S0,
     time::Rate,
@@ -19,11 +19,11 @@ static BUFFER_SIZE: usize = 4 * 4092;
 
 #[embassy_executor::task]
 pub async fn audio_task(
-    i2s_peripheral: I2S0,
-    dma_channel: DmaChannel0,
-    clock_pin: AnyPin,
-    data_pin: AnyPin,
-    ws_pin: AnyPin,
+    i2s_peripheral: I2S0<'static>,
+    dma_channel: DMA_CH0<'static>,
+    clock_pin: AnyPin<'static>,
+    data_pin: AnyPin<'static>,
+    ws_pin: AnyPin<'static>,
 ) {
     let mut audio_controller =
         AudioService::new(i2s_peripheral, dma_channel, clock_pin, data_pin, ws_pin).await;
@@ -40,13 +40,13 @@ pub struct AudioService {
 
 impl AudioService {
     pub async fn new(
-        i2s_peripheral: I2S0,
-        dma_channel: DmaChannel0,
-        clock_pin: AnyPin,
-        data_pin: AnyPin,
-        ws_pin: AnyPin,
+        i2s_peripheral: I2S0<'static>,
+        dma_channel: DMA_CH0<'static>,
+        clock_pin: impl OutputPin + 'static,
+        data_pin: impl OutputPin + 'static,
+        ws_pin: impl OutputPin + 'static,
     ) -> Self {
-        let (_, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(0, BUFFER_SIZE);
+        let (_, _rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(0, BUFFER_SIZE);
 
         let i2s = I2s::new(
             i2s_peripheral,
@@ -54,8 +54,6 @@ impl AudioService {
             DataFormat::Data16Channel16,
             Rate::from_hz(16000u32),
             dma_channel,
-            &mut rx_descriptors[..],
-            &mut tx_descriptors[..],
         )
         .into_async();
 
@@ -64,7 +62,7 @@ impl AudioService {
             .with_bclk(clock_pin)
             .with_dout(data_pin)
             .with_ws(ws_pin)
-            .build();
+            .build(tx_descriptors);
 
         AudioService { tx, tx_buffer }
     }

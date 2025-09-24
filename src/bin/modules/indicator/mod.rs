@@ -9,7 +9,7 @@ pub mod controller;
 pub static INDICATOR_QUEUE: Signal<CriticalSectionRawMutex, RGB8> = Signal::new();
 
 #[embassy_executor::task]
-pub async fn indicator_task(rmt: RMT, led_pin: AnyPin) {
+pub async fn indicator_task(rmt: RMT<'static>, led_pin: AnyPin<'static>) {
     info!("Indicator task started");
     let mut indicator = Indicator::new(rmt, led_pin, RGB8::new(0, 0, 0));
 

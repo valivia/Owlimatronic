@@ -42,7 +42,7 @@ pub async fn mqtt_init(stack: Stack<'static>) {
         if first_run {
             first_run = false;
         } else {
-            Timer::after(Duration::from_secs(reconnect_delay_secs)).await;
+            Timer::after(embassy_time::Duration::from_secs(reconnect_delay_secs)).await;
         }
 
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
