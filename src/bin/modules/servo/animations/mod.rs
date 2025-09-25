@@ -27,4 +27,15 @@ impl AnimationType {
             AnimationType::Shocked => &shocked::ANIMATION,
         }
     }
+
+    pub fn get_from_binary(payload: &[u8]) -> Option<AnimationType> {
+        match payload {
+            b"shocked" => Some(AnimationType::Shocked),
+            b"hello" => Some(AnimationType::Hello),
+            b"sweep" => Some(AnimationType::Sweep),
+            b"panic" => Some(AnimationType::Panic),
+            b"yap" => Some(AnimationType::Yap),
+            _ => None,
+        }
+    }
 }

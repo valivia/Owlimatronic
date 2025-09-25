@@ -13,6 +13,10 @@ use crate::modules::servo::{animation::ANIMATION_QUEUE, animations::AnimationTyp
 
 const TAG: &str = "[MQTT]";
 
+static MQTT_USERNAME: &str = env!("MQTT_USERNAME");
+static MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
+static MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
+
 fn handle_mqtt_error(e: ReasonCode) -> bool {
     match e {
         ReasonCode::NetworkError => {
@@ -51,8 +55,8 @@ pub async fn mqtt_init(stack: Stack<'static>) {
         let remote_endpoint = (Ipv4Addr::new(192, 168, 1, 50), 1883);
         info!("{} connecting...", TAG);
 
-        if let Err(_) = socket.connect(remote_endpoint).await {
-            error!("{} connect error", TAG);
+        if let Err(error) = socket.connect(remote_endpoint).await {
+            error!("{} connect error: {}", TAG, error);
             reconnect_delay_secs = (reconnect_delay_secs * 2).min(60);
             continue;
         }
@@ -66,7 +70,9 @@ pub async fn mqtt_init(stack: Stack<'static>) {
         );
 
         config.add_max_subscribe_qos(QoS::QoS1);
-        config.add_client_id("owlimatronic");
+        config.add_username(MQTT_USERNAME);
+        config.add_password(MQTT_PASSWORD);
+        config.add_client_id(MQTT_CLIENT_ID);
         config.keep_alive = 120;
         config.max_packet_size = 100;
 
@@ -106,13 +112,9 @@ pub async fn mqtt_init(stack: Stack<'static>) {
                 Ok(message) => match message {
                     Ok((topic, payload)) => {
                         info!("{} Received: {} {}", TAG, topic, payload);
-                        let animation = match payload {
-                            b"shocked" => AnimationType::Shocked,
-                            b"hello" => AnimationType::Hello,
-                            b"sweep" => AnimationType::Sweep,
-                            b"panic" => AnimationType::Panic,
-                            b"yap" => AnimationType::Yap,
-                            _ => {
+                        let animation = match AnimationType::get_from_binary(&payload) {
+                            Some(anim) => anim,
+                            None => {
                                 warn!("{} animation not found {}", TAG, payload);
                                 continue;
                             }
