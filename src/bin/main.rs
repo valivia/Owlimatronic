@@ -16,11 +16,13 @@ use modules::servo::controller::ServoController;
 use modules::servo::servo_task;
 
 use crate::modules::connectivity::mqtt::mqtt_init;
+use crate::modules::motion::motion_task;
+use crate::modules::servo::animation::ANIMATION_QUEUE;
+use crate::modules::servo::animations::AnimationType;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
-
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -66,33 +68,41 @@ async fn main(spawner: Spawner) {
     spawner.spawn(servo_task(servo_controller)).unwrap();
 
     // Interaction
-    spawner
-        .spawn(interaction_task(peripherals.GPIO6.into()))
-        .unwrap();
+    let task = interaction_task(peripherals.GPIO6.into());
+    spawner.spawn(task).unwrap();
 
     // Audio
+    let task = audio_task(
+        peripherals.I2S0,
+        peripherals.DMA_CH0,
+        peripherals.GPIO36.into(),
+        peripherals.GPIO37.into(),
+        peripherals.GPIO35.into(),
+    );
 
-    spawner
-        .spawn(audio_task(
-            peripherals.I2S0,
-            peripherals.DMA_CH0,
-            peripherals.GPIO36.into(),
-            peripherals.GPIO37.into(),
-            peripherals.GPIO35.into(),
-        ))
-        .unwrap();
+    spawner.spawn(task).unwrap();
 
-    // Wifi
-    if system_mode == SystemMode::Mailbox {
-        let wifi_stack = wifi_init(
-            spawner,
-            peripherals.TIMG0,
-            peripherals.WIFI,
-            rng.clone(),
-        )
-        .await;
+    match system_mode {
+        SystemMode::Mailbox => {
+            // Wifi
+            let wifi_stack =
+                wifi_init(spawner, peripherals.TIMG0, peripherals.WIFI, rng.clone()).await;
 
-        // MQTT
-        spawner.spawn(mqtt_init(wifi_stack)).ok();
+            // MQTT
+            spawner.spawn(mqtt_init(wifi_stack.clone())).ok();
+        }
+        SystemMode::Play => {
+            ANIMATION_QUEUE.send(AnimationType::Yap).await;
+            // Accelerometer / Gyroscope
+            let task = motion_task(
+                peripherals.I2C0,
+                peripherals.GPIO41.into(),
+                peripherals.GPIO40.into(),
+                peripherals.GPIO39.into(),
+            );
+
+            spawner.spawn(task).unwrap();
+        }
+        SystemMode::Off => (),
     }
 }

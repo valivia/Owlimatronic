@@ -50,6 +50,26 @@ impl Frame {
         }
     }
 
+    pub const fn beak(position: u16, easing: Easing) -> Self {
+        Self {
+            beak_servo: Some((position, easing)),
+            neck_servo: None,
+            wing_right_servo: None,
+            wing_left_servo: None,
+            audio: None,
+        }
+    }
+
+    pub const fn audio(track: Tracks) -> Self {
+        Self {
+            beak_servo: None,
+            neck_servo: None,
+            wing_right_servo: None,
+            wing_left_servo: None,
+            audio: Some(track),
+        }
+    }
+
     pub const fn empty() -> Self {
         Self {
             beak_servo: None,

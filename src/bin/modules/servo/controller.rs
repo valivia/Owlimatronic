@@ -1,21 +1,35 @@
 use defmt::{info, warn};
 use embassy_time::{Duration, Timer};
 use esp_hal::{
-    gpio::{OutputPin},
+    gpio::OutputPin,
     mcpwm::{operator::PwmPinConfig, timer::PwmWorkingMode, McPwm, PeripheralClockConfig},
     peripherals::MCPWM0,
     time::Rate,
 };
 
-use crate::modules::{audio::AUDIO_QUEUE, servo::{animation::{FRAME_DURATION, INTERPOLATION_STEPS}, config::{SERVO_MAX, SERVO_MIN}}, util::map_range_clamped};
+use crate::modules::{
+    audio::AUDIO_QUEUE,
+    servo::{
+        animation::{FRAME_DURATION, INTERPOLATION_STEPS},
+        config::{SERVO_MAX, SERVO_MIN},
+    },
+    util::map_range_clamped,
+};
 
-use super::{animation::{Animation, ANIMATION_QUEUE}, config::SERVO_COUNT, easing::Easing, Servo};
+use super::{
+    animation::{Animation, ANIMATION_QUEUE},
+    config::SERVO_COUNT,
+    easing::Easing,
+    Servo,
+};
 
 pub struct ServoController {
     servos: [Servo<'static>; SERVO_COUNT],
 }
 
 use num_traits::float::FloatCore;
+
+const TAG: &str = "[SERVO]";
 
 impl ServoController {
     pub async fn new(
@@ -85,7 +99,7 @@ impl ServoController {
 
     // Control
     fn reset_servos(&mut self) {
-        info!("Resetting servos to default positions");
+        info!("{} Resetting servos to default positions", TAG);
         for servo in &mut self.servos {
             let servo_config = servo.get_config();
             let position = map_range_clamped(
@@ -100,7 +114,6 @@ impl ServoController {
     }
 
     fn release_servos(&mut self) {
-        info!("Releasing servos");
         for servo in &mut self.servos {
             servo.set_timestamp(0);
         }
@@ -108,7 +121,7 @@ impl ServoController {
 
     // Animation
     pub async fn run_animation(&mut self, animation: &Animation) {
-        info!("Running animation");
+        info!("{} Running animation with {} frames", TAG, animation.len());
         let total_frames = animation.len();
 
         let mut previous_servo_frame_index: [Option<usize>; SERVO_COUNT] = [None; SERVO_COUNT];
@@ -191,7 +204,7 @@ impl ServoController {
                         let target = Self::interpolate(from_value, to_value, t, &easing);
 
                         if (t > 1.0) || (t < 0.0) {
-                            warn!("Interpolation out of bounds: t = {}", t);
+                            warn!("{} Interpolation out of bounds: t = {}", TAG, t);
                         }
 
                         self.servos[servo_index].move_to(target);
@@ -202,7 +215,7 @@ impl ServoController {
             }
         }
 
-        info!("Animation completed!");
+        info!("{} Animation completed!", TAG);
         self.release_servos();
     }
 

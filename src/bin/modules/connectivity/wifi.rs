@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_net::{Runner, Stack, StackResources};
 use embassy_time::{Duration, Timer};
@@ -8,7 +8,6 @@ use esp_hal::{
     rng::Rng,
     timer::timg::TimerGroup,
 };
-use esp_println::println;
 use esp_wifi::{
     init,
     wifi::{ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiState},
@@ -26,6 +25,7 @@ macro_rules! mk_static {
 
 static WIFI_SSID: &str = env!("WIFI_SSID");
 static WIFI_PSK: &str = env!("WIFI_PASS");
+const TAG: &str = "[WIFI]";
 
 pub async fn wifi_init(
     spawner: Spawner,
@@ -66,10 +66,10 @@ pub async fn wifi_init(
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    println!("Waiting to get IP address...");
+    info!("{} Waiting to get IP address...", TAG);
     loop {
         if let Some(config) = stack.config_v4() {
-            println!("Got IP: {}", config.address);
+            info!("{} Got IP: {}", TAG, config.address);
             break;
         }
         Timer::after(Duration::from_millis(500)).await;
@@ -80,8 +80,12 @@ pub async fn wifi_init(
 
 #[embassy_executor::task]
 async fn connection(mut controller: WifiController<'static>) {
-    println!("start connection task");
-    println!("Device capabilities: {:?}", controller.capabilities());
+    info!("{} Start connection task", TAG);
+    info!(
+        "{} Device capabilities: {:?}",
+        TAG,
+        controller.capabilities()
+    );
     loop {
         match esp_wifi::wifi::wifi_state() {
             WifiState::StaConnected => {
@@ -92,30 +96,28 @@ async fn connection(mut controller: WifiController<'static>) {
             _ => {}
         }
         if !matches!(controller.is_started(), Ok(true)) {
-            info!("Connecting to {} ({})", WIFI_SSID, WIFI_PSK);
+            info!("{} Connecting to {} ({})", TAG, WIFI_SSID, WIFI_PSK);
             let client_config = Configuration::Client(ClientConfiguration {
                 ssid: WIFI_SSID.into(),
                 password: WIFI_PSK.into(),
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
-            println!("Starting wifi");
             controller.start_async().await.unwrap();
-            println!("Wifi started!");
 
-            println!("Scan");
+            info!("{} Scan", TAG);
             let networks = controller.scan_n_async(10).await.unwrap();
 
             for ap in networks {
-                println!("{:?}", ap);
+                info!("{} Found AP: {:?}", TAG, ap);
             }
         }
-        println!("About to connect...");
+        info!("{} About to connect...", TAG);
 
         match controller.connect_async().await {
-            Ok(_) => println!("Wifi connected!"),
+            Ok(_) => info!("{} Wifi connected!", TAG),
             Err(e) => {
-                println!("Failed to connect to wifi: {e:?}");
+                error!("{} Failed to connect to wifi: {}", TAG, e);
                 Timer::after(Duration::from_millis(5000)).await
             }
         }

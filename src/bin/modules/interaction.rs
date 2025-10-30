@@ -4,10 +4,11 @@ use esp_hal::gpio::{AnyPin, Event, Input, InputConfig, Pull};
 
 use crate::modules::servo::{animation::ANIMATION_QUEUE, animations::AnimationType};
 
+const TAG: &str = "[INTERACTION]";
 
 #[embassy_executor::task]
 pub async fn interaction_task(beak_pin: AnyPin<'static>) {
-    info!("interaction task started");
+    info!("{} interaction task started", TAG);
     let input_button_cfg = InputConfig::default().with_pull(Pull::Up);
 
     // Beak
@@ -20,12 +21,12 @@ pub async fn interaction_task(beak_pin: AnyPin<'static>) {
     loop {
 
         beak_button.wait_for_falling_edge().await;
-        Timer::after(embassy_time::Duration::from_millis(10)).await;
+        Timer::after(embassy_time::Duration::from_millis(100)).await;
         if beak_button.is_high() {
             continue;
         }
-        info!("Beak button pressed");
-        ANIMATION_QUEUE.send(AnimationType::Sweep).await;
+        info!("{} Beak button pressed", TAG);
+        ANIMATION_QUEUE.send(AnimationType::Yap).await;
     }
 }
 
