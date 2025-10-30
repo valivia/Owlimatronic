@@ -17,6 +17,8 @@ pub mod tracks;
 pub static AUDIO_QUEUE: Channel<CriticalSectionRawMutex, Tracks, 4> = Channel::new();
 static BUFFER_SIZE: usize = 4 * 4092;
 
+const TAG: &str = "[AUDIO]";
+
 #[embassy_executor::task]
 pub async fn audio_task(
     i2s_peripheral: I2S0<'static>,
@@ -27,7 +29,7 @@ pub async fn audio_task(
 ) {
     let mut audio_controller =
         AudioService::new(i2s_peripheral, dma_channel, clock_pin, data_pin, ws_pin).await;
-    info!("audio task started");
+    info!("{} task started", TAG);
     loop {
         audio_controller.run_loop().await;
     }
@@ -75,27 +77,30 @@ impl AudioService {
     async fn play(&mut self, track: Tracks) {
         let audio_data = track.get_file();
         info!(
-            "Audio file ({}) loaded, length: {}",
+            "{} file ({}) loaded, length: {}",
+            TAG,
             track.get_name(),
             audio_data.len()
         );
 
-        // Make sure the buffer is large enough for the chunk size
-        let chunk_size = self.tx_buffer.len(); // Use the buffer size as the chunk size
+        let chunk_size = self.tx_buffer.len() / 2;
 
-        // Make sure the audio data fits in the buffer chunks
         let mut pos = 0;
 
         while pos < audio_data.len() {
-            // Calculate the end of the chunk (do not exceed the audio data length)
             let chunk_end = (pos + chunk_size).min(audio_data.len());
-            let chunk = &audio_data[pos..chunk_end];
+            let mono_chunk = &audio_data[pos..chunk_end];
 
-            // Copy the chunk into tx_buffer
-            self.tx_buffer[..chunk.len()].copy_from_slice(chunk);
+            // Convert mono -> stereo
+            let stereo_chunk = &mut self.tx_buffer[..mono_chunk.len() * 2];
+            for (i, sample) in mono_chunk.chunks_exact(2).enumerate() {
+                // copy 16-bit sample into left and right channels
+                stereo_chunk[i * 4..i * 4 + 2].copy_from_slice(sample); // left
+                stereo_chunk[i * 4 + 2..i * 4 + 4].copy_from_slice(sample); // right
+            }
 
-            // Perform the one-shot DMA write
-            match self.tx.write_dma_async(self.tx_buffer).await {
+            // Write DMA
+            match self.tx.write_dma_async(stereo_chunk).await {
                 Ok(tx) => tx,
                 Err(e) => {
                     info!("Error initializing DMA: {:?}", e);
@@ -103,13 +108,10 @@ impl AudioService {
                 }
             };
 
-            // Move the position for the next chunk
             pos = chunk_end;
-
-            // Optionally, yield to other tasks if needed
             yield_now().await;
         }
 
-        info!("Finished playing the audio.");
+        info!("{} Finished playing.", TAG);
     }
 }
