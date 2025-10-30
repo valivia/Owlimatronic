@@ -65,6 +65,8 @@ rust-mqtt = { version = "0.3.0", default-features = false, features = [
   "defmt",
 ] }
 num-traits = { version = "0.2.19", default-features = false }
+hayasen = { version = "0.0.9", features = ["mpu6050"] }
+libm = "0.2.15"
 # rust-mqtt = "0.3.0"
 
 [profile.dev]

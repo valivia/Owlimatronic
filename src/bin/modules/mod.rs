@@ -1,7 +1,8 @@
-pub mod indicator;
-pub mod servo;
-pub mod connectivity;
 pub mod audio;
-pub mod util;
+pub mod connectivity;
+pub mod indicator;
 pub mod interaction;
 pub mod mode;
+pub mod motion;
+pub mod servo;
+pub mod util;
