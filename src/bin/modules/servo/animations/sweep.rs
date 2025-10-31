@@ -1,7 +1,7 @@
-use crate::modules::servo::{
+use crate::modules::{audio::tracks::Tracks, servo::{
     animation::{Animation, Frame},
     easing::Easing,
-};
+}};
 
 const EASING: Easing = Easing::CubicInOut;
 
@@ -12,7 +12,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: Some((0, EASING)),
         wing_right_servo: Some((0, EASING)),
         wing_left_servo: Some((0, EASING)),
-        audio: None,
+        audio: Some(Tracks::BuboYap1),
     }),
     None,
     None,
@@ -30,7 +30,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: Some((1000, EASING)),
         wing_right_servo: Some((1000, EASING)),
         wing_left_servo: Some((1000, EASING)),
-        audio: None,
+        audio: Some(Tracks::BuboYap1),
     }),
     None,
     None,

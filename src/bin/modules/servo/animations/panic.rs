@@ -14,7 +14,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: Some((DEFAULT_NECK_POSITION - 300, Easing::Linear)),
         wing_right_servo: Some((0, Easing::CubicInOut)),
         wing_left_servo: Some((0, Easing::CubicInOut)),
-        audio: Some(Tracks::Hoot),
+        audio: Some(Tracks::BuboYap1),
     }),
     Some(Frame {
         beak_servo: Some((1000, Easing::Linear)),
@@ -84,7 +84,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: Some((DEFAULT_NECK_POSITION + 300, Easing::Linear)),
         wing_right_servo: Some((0, Easing::CubicInOut)),
         wing_left_servo: Some((0, Easing::CubicInOut)),
-        audio: Some(Tracks::Hoot),
+        audio: Some(Tracks::BuboYap2),
     }),
     Some(Frame {
         beak_servo: Some((1000, Easing::Linear)),

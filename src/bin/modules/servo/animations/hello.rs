@@ -14,7 +14,7 @@ pub static ANIMATION: &Animation = &[
         wing_right_servo: None,
         wing_left_servo: None,
 
-        audio: None,
+        audio: Some(Tracks::BuboRatched1),
     }),
     None,
     None,
@@ -30,7 +30,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: None,
         wing_right_servo: Some((1000, Easing::Linear)),
         wing_left_servo: Some((1000, Easing::Linear)),
-        audio: Some(Tracks::Hello),
+        audio: Some(Tracks::BuboYap1),
     }),
     None,
     Some(Frame {

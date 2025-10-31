@@ -1,5 +1,6 @@
 use super::animation::Animation;
 
+pub mod picked_up;
 pub mod hello;
 pub mod panic;
 pub mod shocked;
@@ -14,6 +15,7 @@ pub enum AnimationType {
     Sweep,
     Panic,
     Shocked,
+    PickedUp,
 }
 
 impl AnimationType {
@@ -25,6 +27,7 @@ impl AnimationType {
             AnimationType::Sweep => &sweep::ANIMATION,
             AnimationType::Panic => &panic::ANIMATION,
             AnimationType::Shocked => &shocked::ANIMATION,
+            AnimationType::PickedUp => &picked_up::ANIMATION,
         }
     }
 
@@ -35,6 +38,7 @@ impl AnimationType {
             b"sweep" => Some(AnimationType::Sweep),
             b"panic" => Some(AnimationType::Panic),
             b"yap" => Some(AnimationType::Yap),
+            b"pick_up" => Some(AnimationType::PickedUp),
             _ => None,
         }
     }
