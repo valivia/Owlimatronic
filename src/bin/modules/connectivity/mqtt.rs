@@ -1,4 +1,4 @@
-use core::net::Ipv4Addr;
+use core::{net::Ipv4Addr, str::FromStr};
 
 use defmt::{error, info, warn};
 use embassy_net::{tcp::TcpSocket, Stack};
@@ -16,9 +16,12 @@ use crate::modules::{
 
 const TAG: &str = "[MQTT]";
 
+static SERVER_IP: &str = env!("SERVER_IP");
+
 static MQTT_USERNAME: &str = env!("MQTT_USERNAME");
 static MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
 static MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
+static MQTT_PORT: &str = env!("MQTT_PORT");
 
 fn handle_mqtt_error(e: ReasonCode) -> bool {
     match e {
@@ -55,7 +58,10 @@ pub async fn mqtt_init(stack: Stack<'static>) {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(Duration::from_secs(10)));
 
-        let remote_endpoint = (Ipv4Addr::new(192, 168, 1, 50), 62934);
+        let remote_endpoint = (
+            Ipv4Addr::from_str(SERVER_IP).expect("Invalid server IP"),
+            u16::from_str(MQTT_PORT).expect("Invalid MQTT port"),
+        );
         info!("{} connecting...", TAG);
 
         if let Err(error) = socket.connect(remote_endpoint).await {

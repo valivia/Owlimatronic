@@ -1,4 +1,4 @@
-use core::{mem::MaybeUninit, net::Ipv4Addr};
+use core::{mem::MaybeUninit, net::Ipv4Addr, str::FromStr};
 
 use defmt::{error, info};
 use embassy_futures::yield_now;
@@ -12,6 +12,9 @@ use crate::modules::audio::AUDIO_STREAM;
 const TAG: &str = "[STREAMER]";
 
 pub static STREAMER_TRIGGER: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+static SERVER_IP: &str = env!("SERVER_IP");
+static STREAMER_PORT: &str = env!("STREAMER_PORT");
 
 pub const AUDIO_CHUNK_SIZE: usize = 2 * 4092;
 
@@ -56,7 +59,10 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(Duration::from_secs(10)));
 
-        let remote_endpoint = (Ipv4Addr::new(192, 168, 1, 50), 9000);
+        let remote_endpoint = (
+            Ipv4Addr::from_str(SERVER_IP).expect("Invalid server IP"),
+            u16::from_str(STREAMER_PORT).expect("Invalid streamer port"),
+        );
         info!("{} connecting...", TAG);
 
         if let Err(e) = socket.connect(remote_endpoint).await {
