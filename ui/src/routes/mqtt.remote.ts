@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { form } from '$app/server';
-import { mqttClient } from "$lib/server/mqtt";
+import { mqttClient } from "$lib/server/services/mqtt";
 
 export const playAnimation = form(
     v.object({

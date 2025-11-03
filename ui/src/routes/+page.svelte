@@ -1,8 +1,18 @@
 <script lang="ts">
     import Owl from "$lib/assets/owl.svelte";
+    import { audioForm } from "./audio.remote";
     import { playAnimation } from "./mqtt.remote";
 
-    const emotes = ["shocked", "hello", "sweep", "panic", "yap", "pick_up", "test"];
+    const emotes = [
+        "shocked",
+        "hello",
+        "sweep",
+        "panic",
+        "yap",
+        "pick_up",
+        "test",
+        "stream",
+    ];
 </script>
 
 <main>
@@ -45,16 +55,25 @@
     </form>
 
     <!-- Audio control -->
-     <form>
+    <form
+        enctype="multipart/form-data"
+        {...audioForm.enhance(async ({ form, data, submit }) => {
+            await submit().catch(console.error);
+        })}
+    >
         <h2>Audio test</h2>
 
         <label>
             Audio file:
-            <input type="file" name="audio_url" accept="audio/*" />
+            <input
+                type="file"
+                name={audioForm.field("audio")}
+                accept="audio/*"
+            />
         </label>
 
         <button type="submit">Play Audio</button>
-     </form>
+    </form>
 </main>
 
 <style lang="scss">
