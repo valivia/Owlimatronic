@@ -131,7 +131,7 @@ impl ServoController {
             // Play audio if present
             if let Some(frame) = &animation[frame_index] {
                 if let Some(audio) = &frame.audio {
-                    AUDIO_QUEUE.send(audio.clone()).await;
+                    AUDIO_QUEUE.signal(audio.clone());
                 }
             }
 

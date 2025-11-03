@@ -10,7 +10,7 @@ pub static ANIMATION: &Animation = &[
         neck_servo: Some((300, Easing::CubicInOut)),
         wing_right_servo: None,
         wing_left_servo: None,
-        audio: Some(Tracks::BuboYap1),
+        audio: Some(Tracks::BuboYap3),
     }),
     Some(Frame {
         beak_servo: Some((0, Easing::CubicInOut)),

@@ -1,6 +1,9 @@
 use defmt::info;
+use embassy_futures::select::{select, Either};
 use embassy_futures::yield_now;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Instant};
 use esp_hal::peripherals::DMA_CH0;
 use esp_hal::{
     dma_buffers,
@@ -10,11 +13,16 @@ use esp_hal::{
     time::Rate,
     Async,
 };
+use ringbuf::traits::Consumer;
 use tracks::Tracks;
+
+use crate::modules::connectivity::streamer::StreamConsumer;
 
 pub mod tracks;
 
-pub static AUDIO_QUEUE: Channel<CriticalSectionRawMutex, Tracks, 4> = Channel::new();
+pub static AUDIO_QUEUE: Signal<CriticalSectionRawMutex, Tracks> = Signal::new();
+pub static AUDIO_STREAM: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+
 static BUFFER_SIZE: usize = 4 * 4092;
 
 const TAG: &str = "[AUDIO]";
@@ -26,9 +34,17 @@ pub async fn audio_task(
     clock_pin: AnyPin<'static>,
     data_pin: AnyPin<'static>,
     ws_pin: AnyPin<'static>,
+    stream_consumer: StreamConsumer,
 ) {
-    let mut audio_controller =
-        AudioService::new(i2s_peripheral, dma_channel, clock_pin, data_pin, ws_pin).await;
+    let mut audio_controller = AudioService::new(
+        i2s_peripheral,
+        dma_channel,
+        clock_pin,
+        data_pin,
+        ws_pin,
+        stream_consumer,
+    )
+    .await;
     info!("{} task started", TAG);
     loop {
         audio_controller.run_loop().await;
@@ -38,6 +54,7 @@ pub async fn audio_task(
 pub struct AudioService {
     tx: I2sTx<'static, Async>,
     tx_buffer: &'static mut [u8; BUFFER_SIZE],
+    stream_consumer: StreamConsumer,
 }
 
 impl AudioService {
@@ -47,6 +64,7 @@ impl AudioService {
         clock_pin: impl OutputPin + 'static,
         data_pin: impl OutputPin + 'static,
         ws_pin: impl OutputPin + 'static,
+        stream_consumer: StreamConsumer,
     ) -> Self {
         let (_, _rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(0, BUFFER_SIZE);
 
@@ -66,52 +84,89 @@ impl AudioService {
             .with_ws(ws_pin)
             .build(tx_descriptors);
 
-        AudioService { tx, tx_buffer }
+        AudioService {
+            tx,
+            tx_buffer,
+            stream_consumer,
+        }
     }
 
     async fn run_loop(&mut self) {
-        let track = AUDIO_QUEUE.receive().await;
-        self.play(track).await;
+        match select(AUDIO_QUEUE.wait(), AUDIO_STREAM.wait()).await {
+            Either::First(track) => {
+                self.play_track(track).await;
+            }
+            Either::Second(_) => {
+                self.stream_live().await;
+            }
+        }
+
+        AUDIO_QUEUE.reset();
+        AUDIO_STREAM.reset();
     }
 
-    async fn play(&mut self, track: Tracks) {
-        let audio_data = track.get_file();
+    async fn play_track(&mut self, track: Tracks) {
+        let pcm = track.get_file();
         info!(
-            "{} file ({}) loaded, length: {}",
+            "{} playing local file '{}' ({} bytes)",
             TAG,
             track.get_name(),
-            audio_data.len()
+            pcm.len()
         );
 
-        let chunk_size = self.tx_buffer.len() / 2;
+        self.play_mono_pcm(&pcm).await;
+        info!("{} done playing local file", TAG);
+    }
 
-        let mut pos = 0;
+    /// Stream live mono PCM
+    async fn stream_live(&mut self) {
+        info!("{} starting live PCM stream", TAG);
 
-        while pos < audio_data.len() {
-            let chunk_end = (pos + chunk_size).min(audio_data.len());
-            let mono_chunk = &audio_data[pos..chunk_end];
+        let start_time = Instant::now();
 
-            // Convert mono -> stereo
-            let stereo_chunk = &mut self.tx_buffer[..mono_chunk.len() * 2];
-            for (i, sample) in mono_chunk.chunks_exact(2).enumerate() {
-                // copy 16-bit sample into left and right channels
-                stereo_chunk[i * 4..i * 4 + 2].copy_from_slice(sample); // left
-                stereo_chunk[i * 4 + 2..i * 4 + 4].copy_from_slice(sample); // right
+        loop {
+            while let Some(chunk) = self.stream_consumer.try_pop() {
+                self.write_mono_chunk(&chunk.data[..chunk.len]).await;
             }
 
-            // Write DMA
-            match self.tx.write_dma_async(stereo_chunk).await {
-                Ok(tx) => tx,
-                Err(e) => {
-                    info!("Error initializing DMA: {:?}", e);
-                    return;
-                }
-            };
+            if Instant::now() - start_time > Duration::from_secs(1) {
+                break;
+            }
 
-            pos = chunk_end;
             yield_now().await;
         }
 
-        info!("{} Finished playing.", TAG);
+        info!("{} live stream ended", TAG);
+    }
+
+    /// Play a complete mono PCM buffer
+    async fn play_mono_pcm(&mut self, pcm: &[u8]) {
+        let chunk_size = self.tx_buffer.len() / 2;
+        let mut pos = 0;
+
+        while pos < pcm.len() {
+            let end = (pos + chunk_size).min(pcm.len());
+            let chunk = &pcm[pos..end];
+            self.write_mono_chunk(chunk).await;
+            pos = end;
+            yield_now().await;
+        }
+    }
+
+    /// Convert a mono chunk to stereo and send it to I2S via DMA
+    async fn write_mono_chunk(&mut self, chunk: &[u8]) {
+        // Each sample = 2 bytes (16-bit)
+        let stereo_len = chunk.len() * 2;
+        let stereo = &mut self.tx_buffer[..stereo_len];
+
+        // Duplicate mono samples into left/right
+        for (i, sample) in chunk.chunks_exact(2).enumerate() {
+            stereo[i * 4..i * 4 + 2].copy_from_slice(sample); // Left
+            stereo[i * 4 + 2..i * 4 + 4].copy_from_slice(sample); // Right
+        }
+
+        if let Err(e) = self.tx.write_dma_async(stereo).await {
+            info!("{} DMA error: {:?}", TAG, e);
+        }
     }
 }

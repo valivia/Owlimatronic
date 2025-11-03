@@ -9,7 +9,10 @@ use rust_mqtt::{
     utils::rng_generator::CountingRng,
 };
 
-use crate::modules::servo::{animation::ANIMATION_QUEUE, animations::AnimationType};
+use crate::modules::{
+    connectivity::streamer::STREAMER_TRIGGER,
+    servo::{animation::ANIMATION_QUEUE, animations::AnimationType},
+};
 
 const TAG: &str = "[MQTT]";
 
@@ -52,7 +55,7 @@ pub async fn mqtt_init(stack: Stack<'static>) {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(Duration::from_secs(10)));
 
-        let remote_endpoint = (Ipv4Addr::new(192, 168, 1, 50), 1883);
+        let remote_endpoint = (Ipv4Addr::new(192, 168, 1, 50), 62934);
         info!("{} connecting...", TAG);
 
         if let Err(error) = socket.connect(remote_endpoint).await {
@@ -112,15 +115,20 @@ pub async fn mqtt_init(stack: Stack<'static>) {
                 Ok(message) => match message {
                     Ok((topic, payload)) => {
                         info!("{} Received: {} {}", TAG, topic, payload);
-                        let animation = match AnimationType::get_from_binary(&payload) {
-                            Some(anim) => anim,
-                            None => {
-                                warn!("{} animation not found {}", TAG, payload);
-                                continue;
-                            }
-                        };
 
-                        ANIMATION_QUEUE.send(animation).await;
+                        if &payload == b"stream" {
+                            STREAMER_TRIGGER.signal(());
+                        } else {
+                            let animation = match AnimationType::get_from_binary(&payload) {
+                                Some(anim) => anim,
+                                None => {
+                                    warn!("{} animation not found {}", TAG, payload);
+                                    continue;
+                                }
+                            };
+
+                            ANIMATION_QUEUE.send(animation).await;
+                        }
                     }
                     Err(error) => {
                         error!("{} {}", TAG, error);

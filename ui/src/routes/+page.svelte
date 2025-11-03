@@ -2,7 +2,7 @@
     import Owl from "$lib/assets/owl.svelte";
     import { playAnimation } from "./mqtt.remote";
 
-    const emotes = ["shocked", "hello", "sweep", "panic", "yap", "pick_up", "test", "audio"];
+    const emotes = ["shocked", "hello", "sweep", "panic", "yap", "pick_up", "test"];
 </script>
 
 <main>

@@ -19,7 +19,6 @@ pub async fn interaction_task(beak_pin: AnyPin<'static>) {
     // TODO implement this when it becomes available https://github.com/esp-rs/esp-hal/issues/1905
 
     loop {
-
         beak_button.wait_for_falling_edge().await;
         Timer::after(embassy_time::Duration::from_millis(100)).await;
         if beak_button.is_high() {
@@ -29,4 +28,3 @@ pub async fn interaction_task(beak_pin: AnyPin<'static>) {
         ANIMATION_QUEUE.send(AnimationType::Yap).await;
     }
 }
-

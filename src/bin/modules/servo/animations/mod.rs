@@ -39,6 +39,7 @@ impl AnimationType {
             b"panic" => Some(AnimationType::Panic),
             b"yap" => Some(AnimationType::Yap),
             b"pick_up" => Some(AnimationType::PickedUp),
+            b"test" => Some(AnimationType::Test),
             _ => None,
         }
     }

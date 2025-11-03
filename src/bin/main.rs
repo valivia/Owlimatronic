@@ -3,6 +3,7 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
+use esp_alloc::HeapStats;
 use esp_hal::clock::CpuClock;
 use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
@@ -14,8 +15,13 @@ use modules::interaction::interaction_task;
 use modules::mode::{initialize_mode, SystemMode};
 use modules::servo::controller::ServoController;
 use modules::servo::servo_task;
+use ringbuf::{traits::*, StaticRb};
+use static_cell::StaticCell;
 
 use crate::modules::connectivity::mqtt::mqtt_init;
+use crate::modules::connectivity::streamer::{
+    streamer_init, AudioChunk, StreamRingBuffer, STREAM_SIZE,
+};
 use crate::modules::motion::motion_task;
 use crate::modules::servo::animation::ANIMATION_QUEUE;
 use crate::modules::servo::animations::AnimationType;
@@ -33,12 +39,14 @@ extern crate alloc;
 
 mod modules;
 
+static STREAM_RING_BUFFER: StaticCell<StreamRingBuffer> = StaticCell::new();
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    esp_alloc::heap_allocator!(size: 72 * 1024);
+    esp_alloc::heap_allocator!(size: 100 * 1024);
 
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -71,6 +79,9 @@ async fn main(spawner: Spawner) {
     let task = interaction_task(peripherals.GPIO6.into());
     spawner.spawn(task).unwrap();
 
+    let stream_ring_buffer = STREAM_RING_BUFFER.init(StaticRb::<AudioChunk, STREAM_SIZE>::default());
+    let (stream_producer, stream_consumer) = stream_ring_buffer.split_ref();
+
     // Audio
     let task = audio_task(
         peripherals.I2S0,
@@ -78,6 +89,7 @@ async fn main(spawner: Spawner) {
         peripherals.GPIO36.into(),
         peripherals.GPIO37.into(),
         peripherals.GPIO35.into(),
+        stream_consumer,
     );
 
     spawner.spawn(task).unwrap();
@@ -90,6 +102,7 @@ async fn main(spawner: Spawner) {
 
             // MQTT
             spawner.spawn(mqtt_init(wifi_stack.clone())).ok();
+            spawner.spawn(streamer_init(wifi_stack, stream_producer)).ok();
         }
         SystemMode::Play => {
             ANIMATION_QUEUE.send(AnimationType::Yap).await;
@@ -105,4 +118,7 @@ async fn main(spawner: Spawner) {
         }
         SystemMode::Off => (),
     }
+
+    let stats: HeapStats = esp_alloc::HEAP.stats();
+    info!("{}", stats);
 }
