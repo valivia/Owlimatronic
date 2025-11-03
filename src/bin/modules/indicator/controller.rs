@@ -1,12 +1,10 @@
 use core::time::Duration;
 use esp_hal::{
+    Blocking,
     gpio::{AnyPin, Level},
     peripherals::RMT,
-    rmt::{
-        Channel, ConstChannelAccess, PulseCode, Rmt, TxChannel, TxChannelConfig, TxChannelCreator,
-    },
+    rmt::{Channel, PulseCode, Rmt, Tx, TxChannelConfig, TxChannelCreator},
     time::Rate,
-    Blocking,
 };
 use rgb::RGB8;
 
@@ -14,11 +12,11 @@ const CLOCK_DIVIDER: u8 = 2;
 const CLOCK_RATE: Rate = Rate::from_mhz(80);
 const TICKS_PER_HZ: Rate = Rate::from_mhz(CLOCK_RATE.as_mhz() / CLOCK_DIVIDER as u32);
 
-type LedChannel = Channel<Blocking, ConstChannelAccess<esp_hal::rmt::Tx, 3>>;
+type LedChannel = Channel<'static, Blocking, Tx>;
 pub struct Indicator(LedChannel);
 
 impl Indicator {
-    fn reset_pulse() -> u32 {
+    fn reset_pulse() -> PulseCode {
         PulseCode::new(
             Level::Low,
             Indicator::duration_to_ticks(TICKS_PER_HZ, &Duration::from_micros(50)),
@@ -27,7 +25,7 @@ impl Indicator {
         )
     }
 
-    fn high_pulse() -> u32 {
+    fn high_pulse() -> PulseCode {
         PulseCode::new(
             Level::High,
             Indicator::duration_to_ticks(TICKS_PER_HZ, &Duration::from_nanos(800)),
@@ -36,7 +34,7 @@ impl Indicator {
         )
     }
 
-    fn low_pulse() -> u32 {
+    fn low_pulse() -> PulseCode {
         PulseCode::new(
             Level::High,
             Indicator::duration_to_ticks(TICKS_PER_HZ, &Duration::from_nanos(400)),
@@ -45,13 +43,14 @@ impl Indicator {
         )
     }
 
-    pub fn new(rmt: RMT, led_pin: AnyPin, initial_color: RGB8) -> Self {
+    pub fn new(rmt: RMT<'static>, led_pin: AnyPin<'static>, initial_color: RGB8) -> Self {
         let rmt = Rmt::new(rmt, Rate::from_mhz(80)).unwrap();
         let tx_config = TxChannelConfig::default().with_clk_divider(CLOCK_DIVIDER);
         let channel = rmt.channel3.configure_tx(led_pin, tx_config).unwrap();
         let reset_pulse = [Self::reset_pulse()];
         let transaction = channel.transmit(&reset_pulse).unwrap();
-        Self(transaction.wait().unwrap()).set_pixel(initial_color)
+        let channel = transaction.wait().unwrap();
+        Self(channel).set_pixel(initial_color)
     }
 
     #[must_use]
@@ -59,7 +58,7 @@ impl Indicator {
         // :huh: wsb2812 leds are GRB, not RGB but this works?
         let color: u32 = ((rgb.r as u32) << 16) | ((rgb.g as u32) << 8) | (rgb.b as u32);
 
-        let mut data = [PulseCode::empty(); 25];
+        let mut data = [PulseCode::end_marker(); 25];
         for i in 0..24 {
             let bit = (color >> (23 - i)) & 0x01 != 0;
             data[i] = if bit {

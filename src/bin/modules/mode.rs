@@ -18,6 +18,7 @@ pub enum SystemMode {
 }
 
 pub async fn initialize_mode(
+    spawner: Spawner,
     mode_pin_1: impl InputPin + 'static,
     mode_pin_2: impl InputPin + 'static,
 ) -> SystemMode {
@@ -59,8 +60,7 @@ pub async fn initialize_mode(
         }
     }
 
-    Spawner::for_current_executor()
-        .await
+    spawner
         .spawn(mode_task(play_state, common_state, system_mode))
         .unwrap();
 

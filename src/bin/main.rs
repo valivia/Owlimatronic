@@ -5,22 +5,21 @@ use defmt::info;
 use embassy_executor::Spawner;
 use esp_alloc::HeapStats;
 use esp_hal::clock::CpuClock;
-use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use modules::audio::audio_task;
 use modules::connectivity::wifi::wifi_init;
 use modules::indicator::indicator_task;
 use modules::interaction::interaction_task;
-use modules::mode::{initialize_mode, SystemMode};
+use modules::mode::{SystemMode, initialize_mode};
 use modules::servo::controller::ServoController;
 use modules::servo::servo_task;
-use ringbuf::{traits::*, StaticRb};
+use ringbuf::{StaticRb, traits::*};
 use static_cell::StaticCell;
 
 use crate::modules::connectivity::mqtt::mqtt_init;
 use crate::modules::connectivity::streamer::{
-    streamer_init, AudioChunk, StreamRingBuffer, STREAM_SIZE,
+    AudioChunk, STREAM_SIZE, StreamRingBuffer, streamer_init,
 };
 use crate::modules::motion::motion_task;
 use crate::modules::servo::animation::ANIMATION_QUEUE;
@@ -41,17 +40,15 @@ mod modules;
 
 static STREAM_RING_BUFFER: StaticCell<StreamRingBuffer> = StaticCell::new();
 
-#[esp_hal_embassy::main]
+#[esp_rtos::main]
 async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    esp_alloc::heap_allocator!(size: 100 * 1024);
+    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 72 * 1024);
 
-    let timg1 = TimerGroup::new(peripherals.TIMG1);
-    esp_hal_embassy::init(timg1.timer0);
-
-    let rng = Rng::new(peripherals.RNG);
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    esp_rtos::start(timg0.timer0);
 
     info!("Embassy initialized!");
 
@@ -61,7 +58,7 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     // Mode
-    let system_mode = initialize_mode(peripherals.GPIO8, peripherals.GPIO9).await;
+    let system_mode = initialize_mode(spawner, peripherals.GPIO8, peripherals.GPIO9).await;
 
     // Servos
     let servo_controller = ServoController::new(
@@ -79,7 +76,8 @@ async fn main(spawner: Spawner) {
     let task = interaction_task(peripherals.GPIO6.into());
     spawner.spawn(task).unwrap();
 
-    let stream_ring_buffer = STREAM_RING_BUFFER.init(StaticRb::<AudioChunk, STREAM_SIZE>::default());
+    let stream_ring_buffer =
+        STREAM_RING_BUFFER.init(StaticRb::<AudioChunk, STREAM_SIZE>::default());
     let (stream_producer, stream_consumer) = stream_ring_buffer.split_ref();
 
     // Audio
@@ -98,11 +96,13 @@ async fn main(spawner: Spawner) {
         SystemMode::Mailbox => {
             // Wifi
             let wifi_stack =
-                wifi_init(spawner, peripherals.TIMG0, peripherals.WIFI, rng.clone()).await;
+                wifi_init(spawner, peripherals.WIFI).await;
 
             // MQTT
             spawner.spawn(mqtt_init(wifi_stack.clone())).ok();
-            spawner.spawn(streamer_init(wifi_stack, stream_producer)).ok();
+            spawner
+                .spawn(streamer_init(wifi_stack, stream_producer))
+                .ok();
         }
         SystemMode::Play => {
             ANIMATION_QUEUE.send(AnimationType::Yap).await;

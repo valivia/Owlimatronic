@@ -1,17 +1,17 @@
 use defmt::info;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{Either, select};
 use embassy_futures::yield_now;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant};
+use esp_hal::i2s::master::Config;
 use esp_hal::peripherals::DMA_CH0;
 use esp_hal::{
-    dma_buffers,
+    Async, dma_buffers,
     gpio::{AnyPin, OutputPin},
-    i2s::master::{DataFormat, I2s, I2sTx, Standard},
+    i2s::master::{DataFormat, I2s, I2sTx},
     peripherals::I2S0,
     time::Rate,
-    Async,
 };
 use ringbuf::traits::Consumer;
 use tracks::Tracks;
@@ -68,14 +68,13 @@ impl AudioService {
     ) -> Self {
         let (_, _rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(0, BUFFER_SIZE);
 
-        let i2s = I2s::new(
-            i2s_peripheral,
-            Standard::Philips,
-            DataFormat::Data16Channel16,
-            Rate::from_hz(16000u32),
-            dma_channel,
-        )
-        .into_async();
+        let config = Config::default()
+            .with_sample_rate(Rate::from_hz(16000u32))
+            .with_data_format(DataFormat::Data16Channel16);
+
+        let i2s = I2s::new(i2s_peripheral, dma_channel, config)
+            .unwrap()
+            .into_async();
 
         let tx = i2s
             .i2s_tx
