@@ -1,12 +1,17 @@
-use core::{net::Ipv4Addr, str::FromStr};
-
+use core::num::NonZero;
 use defmt::{error, info, warn};
-use embassy_net::{tcp::TcpSocket, Stack};
-use embassy_time::{with_timeout, Duration, Timer};
+use embassy_futures::select::{Either, select};
+use embassy_net::{IpEndpoint, Stack, tcp::TcpSocket};
+use embassy_time::{Duration, Timer};
 use rust_mqtt::{
-    client::{client::MqttClient, client_config::ClientConfig},
-    packet::v5::{publish_packet::QualityOfService as QoS, reason_codes::ReasonCode},
-    utils::rng_generator::CountingRng,
+    buffer::*,
+    client::{
+        Client,
+        event::Event,
+        options::{ConnectOptions, RetainHandling, SubscriptionOptions},
+    },
+    config::{KeepAlive, SessionExpiryInterval},
+    types::{MqttBinary, MqttString, TopicFilter, VarByteInt},
 };
 
 use crate::modules::{
@@ -23,137 +28,134 @@ static MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
 static MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
 static MQTT_PORT: &str = env!("MQTT_PORT");
 
-fn handle_mqtt_error(e: ReasonCode) -> bool {
-    match e {
-        ReasonCode::NetworkError => {
-            error!("{} Network Error", TAG);
-            true
-        }
-        _ => {
-            error!("{} Other Error: {:?}", TAG, e);
-            false
+static RECONNECT_DELAY: Duration = Duration::from_secs(5);
+type MqttClient<'c> = Client<'c, TcpSocket<'c>, BumpBuffer<'c>, 1, 1, 1, 1>;
+
+#[embassy_executor::task]
+pub async fn mqtt_init(stack: Stack<'static>) {
+    let mut tcp_rx = [0u8; 4096];
+    let mut tcp_tx = [0u8; 4096];
+    let mut mqtt_storage = [0u8; 1024];
+
+    let endpoint = IpEndpoint::new(SERVER_IP.parse().unwrap(), MQTT_PORT.parse().unwrap());
+
+    loop {
+        stack.wait_config_up().await;
+
+        if let Err(error) =
+            mqtt_connect_and_run(stack, &mut tcp_rx, &mut tcp_tx, &mut mqtt_storage, endpoint).await
+        {
+            warn!(
+                "{} Reconnecting in {}s ({:?})",
+                TAG,
+                RECONNECT_DELAY.as_secs(),
+                error
+            );
+
+            Timer::after(RECONNECT_DELAY).await;
         }
     }
 }
 
-#[embassy_executor::task]
-pub async fn mqtt_init(stack: Stack<'static>) {
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
-    let mut reconnect_delay_secs = 1;
-    let mut first_run = true;
+async fn mqtt_connect_and_run<'c>(
+    stack: Stack<'static>,
+    rx_buffer: &'c mut [u8],
+    tx_buffer: &'c mut [u8],
+    mqtt_storage: &'c mut [u8],
+    endpoint: IpEndpoint,
+) -> Result<(), &'static str> {
+    let mut socket = TcpSocket::new(stack, rx_buffer, tx_buffer);
 
-    loop {
-        if !stack.is_config_up() {
-            stack.wait_config_up().await;
-            info!("{} WIFI stack is up, connecting to MQTT broker", TAG);
-        }
+    socket.set_timeout(Some(Duration::from_secs(60)));
 
-        if first_run {
-            first_run = false;
-        } else {
-            Timer::after(embassy_time::Duration::from_secs(reconnect_delay_secs)).await;
-        }
+    info!("{} TCP connecting...", TAG);
 
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(Duration::from_secs(10)));
+    socket
+        .connect(endpoint)
+        .await
+        .map_err(|_| "tcp connect failed")?;
 
-        let remote_endpoint = (
-            Ipv4Addr::from_str(SERVER_IP).expect("Invalid server IP"),
-            u16::from_str(MQTT_PORT).expect("Invalid MQTT port"),
-        );
-        info!("{} connecting...", TAG);
+    info!("{} TCP connected", TAG);
 
-        if let Err(error) = socket.connect(remote_endpoint).await {
-            error!("{} connect error: {}", TAG, error);
-            reconnect_delay_secs = (reconnect_delay_secs * 2).min(60);
-            continue;
-        }
+    let mut mqtt_buffer = BumpBuffer::new(mqtt_storage);
 
-        reconnect_delay_secs = 1;
-        info!("{} TCP connected!", TAG);
+    let mut client = Client::<_, _, 1, 1, 1, 1>::new(&mut mqtt_buffer);
 
-        let mut config = ClientConfig::new(
-            rust_mqtt::client::client_config::MqttVersion::MQTTv5,
-            CountingRng(20000),
-        );
-
-        config.add_max_subscribe_qos(QoS::QoS1);
-        config.add_username(MQTT_USERNAME);
-        config.add_password(MQTT_PASSWORD);
-        config.add_client_id(MQTT_CLIENT_ID);
-        config.keep_alive = 120;
-        config.max_packet_size = 100;
-
-        let mut recv_buffer = [0; 256];
-        let mut write_buffer = [0; 256];
-
-        let mut client = MqttClient::<_, 5, _>::new(
+    client
+        .connect(
             socket,
-            &mut write_buffer,
-            256,
-            &mut recv_buffer,
-            256,
-            config,
-        );
+            &ConnectOptions::new()
+                .clean_start()
+                .session_expiry_interval(SessionExpiryInterval::Seconds(0))
+                .keep_alive(KeepAlive::Seconds(NonZero::new(60).unwrap()))
+                .user_name(MqttString::try_from(MQTT_USERNAME).unwrap())
+                .password(MqttBinary::try_from(MQTT_PASSWORD).unwrap()),
+            Some(MqttString::try_from(MQTT_CLIENT_ID).unwrap()),
+        )
+        .await
+        .map_err(|_| "mqtt connect failed")?;
 
-        info!("{} client created", TAG);
+    let mut sub_options = SubscriptionOptions::new()
+        .retain_handling(RetainHandling::SendIfNotSubscribedBefore)
+        .retain_as_published()
+        .at_least_once();
 
-        if let Err(mqtt_error) = client.connect_to_broker().await {
-            handle_mqtt_error(mqtt_error);
-            continue;
-        }
+    if client.server_config().subscription_identifiers_supported {
+        sub_options.subscription_identifier = Some(VarByteInt::from(42u16));
+    }
 
-        info!("{} connected to broker!", TAG);
+    let topic = MqttString::from_str("owlimatronic/event").unwrap();
 
-        if let Err(_) = client.subscribe_to_topic("owlimatronic/event").await {
-            error!("{} Failed to subscribe to topics", TAG);
-            continue;
-        } else {
-            info!("{} Subsribed to topics", TAG);
-        }
+    let filter = TopicFilter::new(topic.as_borrowed()).unwrap();
 
-        loop {
-            let result = with_timeout(Duration::from_secs(8), client.receive_message()).await;
+    client
+        .subscribe(filter.as_borrowed(), sub_options)
+        .await
+        .map_err(|_| "subscribe failed")?;
 
-            match result {
-                // Message received
-                Ok(message) => match message {
-                    Ok((topic, payload)) => {
-                        info!("{} Received: {} {}", TAG, topic, payload);
+    info!("{} MQTT connected", TAG);
 
-                        if &payload == b"stream" {
-                            STREAMER_TRIGGER.signal(());
-                        } else {
-                            let animation = match AnimationType::get_from_binary(&payload) {
-                                Some(anim) => anim,
-                                None => {
-                                    warn!("{} animation not found {}", TAG, payload);
-                                    continue;
-                                }
-                            };
+    mqtt_run(&mut client).await?;
 
-                            ANIMATION_QUEUE.send(animation).await;
-                        }
-                    }
-                    Err(error) => {
-                        error!("{} {}", TAG, error);
-                    }
-                },
+    Ok(())
+}
 
-                // Timeout occurred
-                Err(_) => {
-                    if let Err(e) = client.send_ping().await {
-                        if handle_mqtt_error(e) {
-                            break;
-                        } else {
-                            continue;
-                        }
+async fn mqtt_run(client: &mut MqttClient<'_>) -> Result<(), &'static str> {
+    loop {
+        match select(client.poll(), Timer::after(Duration::from_secs(30))).await {
+            Either::First(result) => match result {
+                Ok(Event::Publish(message)) => {
+                    let payload = message.message;
+
+                    info!("{} Received: {} {}", TAG, message.topic, payload);
+
+                    if payload.as_bytes() == b"stream" {
+                        STREAMER_TRIGGER.signal(());
+                    } else {
+                        let animation = match AnimationType::get_from_binary(&payload) {
+                            Some(anim) => anim,
+                            None => {
+                                warn!("{} Animation not found {}", TAG, payload);
+                                continue;
+                            }
+                        };
+
+                        ANIMATION_QUEUE.send(animation).await;
                     }
                 }
-            }
 
-            Timer::after(Duration::from_millis(100)).await;
+                Ok(Event::Pingresp) => (),
+                Ok(event) => {
+                    info!("{:?}", event)
+                }
+                Err(e) => {
+                    error!("{} MQTT error: {:?}", TAG, e);
+                    return Err("poll failed");
+                }
+            },
+            Either::Second(_) => {
+                client.ping().await.ok();
+            }
         }
     }
 }

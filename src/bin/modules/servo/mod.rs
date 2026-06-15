@@ -10,9 +10,11 @@ pub mod config;
 pub mod controller;
 pub mod easing;
 
+const TAG: &str = "[MQTT]";
+
 #[embassy_executor::task]
 pub async fn servo_task(mut controller: ServoController) {
-    info!("Servo task started");
+    info!("{} Task started", TAG);
 
     loop {
         controller.run_loop().await;

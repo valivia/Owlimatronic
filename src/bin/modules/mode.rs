@@ -60,9 +60,7 @@ pub async fn initialize_mode(
         }
     }
 
-    spawner
-        .spawn(mode_task(play_state, common_state, system_mode))
-        .unwrap();
+    spawner.spawn(mode_task(play_state, common_state, system_mode).unwrap());
 
     system_mode
 }

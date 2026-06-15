@@ -46,7 +46,11 @@ impl Indicator {
     pub fn new(rmt: RMT<'static>, led_pin: AnyPin<'static>, initial_color: RGB8) -> Self {
         let rmt = Rmt::new(rmt, Rate::from_mhz(80)).unwrap();
         let tx_config = TxChannelConfig::default().with_clk_divider(CLOCK_DIVIDER);
-        let channel = rmt.channel3.configure_tx(led_pin, tx_config).unwrap();
+        let channel = rmt
+            .channel3
+            .configure_tx(&tx_config)
+            .unwrap()
+            .with_pin(led_pin);
         let reset_pulse = [Self::reset_pulse()];
         let transaction = channel.transmit(&reset_pulse).unwrap();
         let channel = transaction.wait().unwrap();

@@ -2,10 +2,10 @@ use core::{mem::MaybeUninit, net::Ipv4Addr, str::FromStr};
 
 use defmt::{error, info};
 use embassy_futures::yield_now;
-use embassy_net::{tcp::TcpSocket, Stack};
+use embassy_net::{Stack, tcp::TcpSocket};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use ringbuf::{storage::Owning, traits::Producer, wrap::caching::Caching, SharedRb};
+use ringbuf::{SharedRb, storage::Owning, traits::Producer, wrap::caching::Caching};
 
 use crate::modules::audio::AUDIO_STREAM;
 
@@ -39,6 +39,11 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
 
     info!("{} Starting", TAG);
 
+    let remote_endpoint = (
+        Ipv4Addr::from_str(SERVER_IP).expect("Invalid server IP"),
+        u16::from_str(STREAMER_PORT).expect("Invalid streamer port"),
+    );
+
     loop {
         // Wait for streamer trigger
         STREAMER_TRIGGER.wait().await;
@@ -46,7 +51,6 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
         // Ensure network stack is up
         if !stack.is_config_up() {
             stack.wait_config_up().await;
-            info!("{} WIFI stack is up", TAG);
         }
 
         if first_run {
@@ -59,14 +63,10 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         socket.set_timeout(Some(Duration::from_secs(10)));
 
-        let remote_endpoint = (
-            Ipv4Addr::from_str(SERVER_IP).expect("Invalid server IP"),
-            u16::from_str(STREAMER_PORT).expect("Invalid streamer port"),
-        );
-        info!("{} connecting...", TAG);
+        info!("{} Connecting...", TAG);
 
         if let Err(e) = socket.connect(remote_endpoint).await {
-            error!("{} connect error: {}", TAG, e);
+            error!("{} Connect error: {}", TAG, e);
             reconnect_delay_secs = (reconnect_delay_secs * 2).min(60);
             continue;
         }
@@ -83,7 +83,7 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
         loop {
             match socket.read(&mut buffer).await {
                 Ok(0) => {
-                    info!("{} stream ended", TAG);
+                    info!("{} Stream ended", TAG);
                     break;
                 }
                 Ok(n) => {
@@ -112,7 +112,7 @@ pub async fn streamer_init(stack: Stack<'static>, mut stream: StreamProducer) {
                     }
                 }
                 Err(e) => {
-                    error!("{} read error: {}", TAG, e);
+                    error!("{} Read error: {}", TAG, e);
                     break;
                 }
             }
